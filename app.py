@@ -70,8 +70,15 @@ def remove_background_and_composite(product_image_path, background_image_path, o
         
         # Remove background with alpha matting for better edge quality
         # alpha_matting helps improve edge detection and reduce excessive removal
-        # Adjusted parameters to avoid Cholesky decomposition warnings
-        output_bytes = remove(input_image, alpha_matting=True, alpha_matting_foreground_threshold=250, alpha_matting_background_threshold=20, alpha_matting_erode_size=10)
+        # Using relaxed parameters to ensure matrix stability and avoid Cholesky warnings
+        # These settings prioritize stability while maintaining good edge quality
+        output_bytes = remove(
+            input_image, 
+            alpha_matting=True, 
+            alpha_matting_foreground_threshold=270,
+            alpha_matting_background_threshold=30,
+            alpha_matting_erode_size=15
+        )
         
         # Convert bytes to PIL Image using BytesIO
         product_img = Image.open(io.BytesIO(output_bytes)).convert("RGBA")
@@ -241,7 +248,7 @@ def create_carousel_clip(image_path, duration=3, video_size=(1920, 1080)):
         clip = clip.set_position(position_func)
         
         # Apply resize animation
-        clip = clip.resize(lambda t: resize_func(t))
+        clip = clip.resize(resize_func)
         
         # Note: No crossfade applied to preserve the transition effect
         
@@ -414,7 +421,7 @@ def create_filmstrip_transition_clip(image_path, duration=3, video_size=(1920, 1
         
         # Apply effects
         clip = clip.set_position(position_func)
-        clip = clip.resize(lambda t: resize_func(t))
+        clip = clip.resize(resize_func)
         
         # Note: No crossfade applied to preserve the filmstrip transition effect
         
