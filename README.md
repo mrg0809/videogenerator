@@ -118,7 +118,17 @@ videogenerator/
 Puedes configurar las siguientes variables de entorno:
 
 - `SECRET_KEY`: Clave secreta para Flask (por defecto: 'dev_secret_key_change_in_production')
-- `FLASK_ENV`: Entorno de Flask (development/production)
+  - **IMPORTANTE**: En producción, establece una clave secreta segura y aleatoria
+- `FLASK_DEBUG`: Modo debug (1 para desarrollo, 0 para producción, por defecto: 1)
+  - **IMPORTANTE**: Siempre establece `FLASK_DEBUG=0` en producción por seguridad
+
+#### Ejemplo para producción:
+
+```bash
+export SECRET_KEY="tu-clave-secreta-muy-larga-y-aleatoria"
+export FLASK_DEBUG=0
+python app.py
+```
 
 ### Límites de Tamaño
 
@@ -187,10 +197,13 @@ Para probar la aplicación, necesitarás:
 
 ### Seguridad
 
-- En producción, cambia la `SECRET_KEY` por una clave segura
+- **CRÍTICO**: En producción, establece `FLASK_DEBUG=0` para desactivar el modo debug
+- En producción, cambia la `SECRET_KEY` por una clave segura y aleatoria
 - Considera implementar autenticación si la aplicación es pública
 - Limita el tamaño de los archivos subidos según tus necesidades
 - Implementa limpieza periódica de videos antiguos
+- Considera usar HTTPS en producción
+- Valida y sanitiza todas las entradas de usuario
 
 ## 🐛 Solución de Problemas
 
