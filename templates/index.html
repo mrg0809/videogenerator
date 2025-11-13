@@ -85,6 +85,19 @@
                     <small>Si está activado, se removerá automáticamente el fondo de cada imagen de producto</small>
                 </div>
 
+                <div class="form-group">
+                    <label for="transition_type">
+                        <span class="label-icon">🎞️</span>
+                        Tipo de Transición
+                    </label>
+                    <select id="transition_type" name="transition_type" class="form-select">
+                        <option value="carousel">Carrusel (Deslizamiento horizontal suave)</option>
+                        <option value="card">Tarjetas (Fade + Deslizamiento lateral)</option>
+                        <option value="filmstrip">Cinta de Película (Efecto negativo vintage)</option>
+                    </select>
+                    <small>Selecciona el efecto de transición entre imágenes</small>
+                </div>
+
                 <div class="button-group">
                     <button type="submit" class="btn btn-primary" id="submitBtn">
                         <span class="btn-icon">✨</span>
@@ -117,9 +130,15 @@
             <h3>📋 Instrucciones</h3>
             <ol>
                 <li><strong>Video de Introducción:</strong> Selecciona un video que se mostrará al inicio del video final.</li>
-                <li><strong>Imágenes de Productos:</strong> Selecciona entre 1 y 5 imágenes de productos. El fondo de cada imagen será eliminado automáticamente.</li>
+                <li><strong>Imágenes de Productos:</strong> Selecciona entre 1 y 5 imágenes de productos. El fondo de cada imagen puede ser eliminado automáticamente si activas la opción.</li>
                 <li><strong>Fondo Personalizado:</strong> (Opcional) Sube una imagen que se usará como nuevo fondo para las imágenes de productos.</li>
-                <li><strong>Efecto Carrusel:</strong> Las imágenes se mostrarán con un efecto de deslizamiento horizontal suave.</li>
+                <li><strong>Tipo de Transición:</strong> Elige entre tres efectos diferentes:
+                    <ul>
+                        <li><strong>Carrusel:</strong> Deslizamiento horizontal suave con escalado</li>
+                        <li><strong>Tarjetas:</strong> Efecto fade out/in con deslizamiento lateral</li>
+                        <li><strong>Cinta de Película:</strong> Estilo negativo vintage con scroll vertical</li>
+                    </ul>
+                </li>
                 <li><strong>Procesamiento:</strong> El proceso puede tomar varios minutos dependiendo del tamaño de los archivos.</li>
             </ol>
         </div>
@@ -141,12 +160,17 @@
                 <div class="feature-card">
                     <div class="feature-icon">✂️</div>
                     <h4>Eliminación de Fondo</h4>
-                    <p>Remueve automáticamente el fondo de las imágenes</p>
+                    <p>Remueve automáticamente el fondo de las imágenes con mejor precisión</p>
                 </div>
                 <div class="feature-card">
                     <div class="feature-icon">🎨</div>
                     <h4>Fondo Personalizado</h4>
                     <p>Usa tu propia imagen de fondo</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🎞️</div>
+                    <h4>3 Tipos de Transición</h4>
+                    <p>Carrusel, Tarjetas o Cinta de Película</p>
                 </div>
             </div>
         </div>

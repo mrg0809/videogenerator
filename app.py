@@ -4,7 +4,7 @@ import io
 from flask import Flask, request, render_template, redirect, url_for, send_from_directory, flash
 from werkzeug.utils import secure_filename
 from moviepy.editor import VideoFileClip, ImageClip, CompositeVideoClip, concatenate_videoclips
-from PIL import Image
+from PIL import Image, ImageDraw
 from rembg import remove
 import numpy as np
 
@@ -68,8 +68,9 @@ def remove_background_and_composite(product_image_path, background_image_path, o
         with open(product_image_path, 'rb') as f:
             input_image = f.read()
         
-        # Remove background - rembg.remove returns bytes
-        output_bytes = remove(input_image)
+        # Remove background with alpha matting for better edge quality
+        # alpha_matting helps improve edge detection and reduce excessive removal
+        output_bytes = remove(input_image, alpha_matting=True, alpha_matting_foreground_threshold=240, alpha_matting_background_threshold=10)
         
         # Convert bytes to PIL Image using BytesIO
         product_img = Image.open(io.BytesIO(output_bytes)).convert("RGBA")
@@ -251,9 +252,183 @@ def create_carousel_clip(image_path, duration=3, video_size=(1920, 1080)):
         raise
 
 
-def generate_video(intro_path, product_images, background_image_path, output_path, remove_bg=True):
+def create_card_transition_clip(image_path, duration=3, video_size=(1920, 1080)):
     """
-    Generate the final video with intro and carousel of product images.
+    Create a video clip with card-style transition (fade + slide effect).
+    Images fade out while sliding to the side, then fade in from the other side.
+    
+    Args:
+        image_path: Path to the image
+        duration: Duration of the clip in seconds
+        video_size: Size of the video (width, height)
+    
+    Returns:
+        VideoClip: The created video clip with card transition effect
+    """
+    try:
+        # Load image
+        img = Image.open(image_path)
+        img = img.resize(video_size, Image.Resampling.LANCZOS)
+        img_array = np.array(img)
+        
+        # Create ImageClip
+        clip = ImageClip(img_array, duration=duration)
+        
+        # Define position function for slide effect
+        def position_func(t):
+            progress = t / duration
+            
+            if progress < 0.25:
+                # Slide in from left with fade in
+                ease = progress / 0.25
+                ease = 1 - (1 - ease) ** 2  # Ease-out
+                x = -video_size[0] * 0.5 * (1 - ease)
+            elif progress > 0.75:
+                # Slide out to right with fade out
+                ease = (progress - 0.75) / 0.25
+                ease = ease ** 2  # Ease-in
+                x = video_size[0] * 0.5 * ease
+            else:
+                # Stay centered
+                x = 0
+            
+            return (x, 'center')
+        
+        # Define opacity function for fade effect
+        def opacity_func(t):
+            progress = t / duration
+            
+            if progress < 0.25:
+                # Fade in
+                return progress / 0.25
+            elif progress > 0.75:
+                # Fade out
+                return 1 - ((progress - 0.75) / 0.25)
+            else:
+                # Full opacity
+                return 1.0
+        
+        # Apply position and opacity
+        clip = clip.set_position(position_func)
+        clip = clip.set_opacity(lambda t: opacity_func(t))
+        
+        return clip
+    
+    except Exception as e:
+        print(f"Error creating card transition clip: {e}")
+        raise
+
+
+def create_filmstrip_transition_clip(image_path, duration=3, video_size=(1920, 1080)):
+    """
+    Create a video clip with film strip transition (vintage camera negative effect).
+    Images resize with a film negative border effect, simulating scrolling through film.
+    
+    Args:
+        image_path: Path to the image
+        duration: Duration of the clip in seconds
+        video_size: Size of the video (width, height)
+    
+    Returns:
+        VideoClip: The created video clip with film strip transition effect
+    """
+    try:
+        # Load and prepare the main image
+        img = Image.open(image_path)
+        img = img.resize(video_size, Image.Resampling.LANCZOS)
+        
+        # Create film strip frame effect
+        # Add dark borders to simulate film negative
+        border_size = int(video_size[1] * 0.08)  # 8% of height for borders
+        
+        # Create a darker background for film effect
+        film_bg = Image.new('RGB', video_size, (40, 35, 30))  # Dark brownish
+        
+        # Calculate image size with borders
+        img_height = video_size[1] - (2 * border_size)
+        img_width = video_size[0]
+        img_resized = img.resize((img_width, img_height), Image.Resampling.LANCZOS)
+        
+        # Paste image on film background
+        film_bg.paste(img_resized, (0, border_size))
+        
+        # Add film sprocket holes effect (small rectangles on borders)
+        draw = ImageDraw.Draw(film_bg)
+        hole_width = int(video_size[0] * 0.03)
+        hole_height = int(border_size * 0.6)
+        hole_color = (0, 0, 0)
+        
+        # Top border holes
+        for i in range(0, video_size[0], int(video_size[0] * 0.1)):
+            draw.rectangle([i, border_size//4, i + hole_width, border_size//4 + hole_height], fill=hole_color)
+        
+        # Bottom border holes
+        for i in range(0, video_size[0], int(video_size[0] * 0.1)):
+            y_pos = video_size[1] - border_size + border_size//4
+            draw.rectangle([i, y_pos, i + hole_width, y_pos + hole_height], fill=hole_color)
+        
+        img_array = np.array(film_bg)
+        
+        # Create ImageClip
+        clip = ImageClip(img_array, duration=duration)
+        
+        # Define position function for vertical scrolling effect
+        def position_func(t):
+            progress = t / duration
+            
+            if progress < 0.3:
+                # Scroll in from bottom
+                ease = progress / 0.3
+                ease = 1 - (1 - ease) ** 2  # Ease-out
+                y = video_size[1] * 0.3 * (1 - ease)
+            elif progress > 0.7:
+                # Scroll out to top
+                ease = (progress - 0.7) / 0.3
+                ease = ease ** 2  # Ease-in
+                y = -video_size[1] * 0.3 * ease
+            else:
+                # Stay centered
+                y = 0
+            
+            return ('center', y)
+        
+        # Define resize function for zoom effect
+        def resize_func(t):
+            progress = t / duration
+            
+            if progress < 0.3:
+                # Zoom in from 90% to 100%
+                ease = progress / 0.3
+                ease = 1 - (1 - ease) ** 2
+                scale = 0.9 + (0.1 * ease)
+            elif progress > 0.7:
+                # Zoom out from 100% to 90%
+                ease = (progress - 0.7) / 0.3
+                ease = ease ** 2
+                scale = 1.0 - (0.1 * ease)
+            else:
+                # Stay at full size
+                scale = 1.0
+            
+            return scale
+        
+        # Apply effects
+        clip = clip.set_position(position_func)
+        clip = clip.resize(lambda t: resize_func(t))
+        
+        # Slight fade for smoother transitions
+        clip = clip.crossfadein(0.2).crossfadeout(0.2)
+        
+        return clip
+    
+    except Exception as e:
+        print(f"Error creating filmstrip transition clip: {e}")
+        raise
+
+
+def generate_video(intro_path, product_images, background_image_path, output_path, remove_bg=True, transition_type='carousel'):
+    """
+    Generate the final video with intro and product images using selected transition effect.
     
     Args:
         intro_path: Path to intro video
@@ -261,6 +436,7 @@ def generate_video(intro_path, product_images, background_image_path, output_pat
         background_image_path: Path to custom background image (can be None)
         output_path: Path to save the output video
         remove_bg: Whether to remove background from images (default: True)
+        transition_type: Type of transition ('carousel', 'card', or 'filmstrip')
     
     Returns:
         str: Path to the generated video
@@ -306,9 +482,15 @@ def generate_video(intro_path, product_images, background_image_path, output_pat
                     video_size
                 )
             
-            # Create carousel clip with card effect
-            carousel_clip = create_carousel_clip(processed_image_path, duration=3, video_size=video_size)
-            clips.append(carousel_clip)
+            # Create clip with selected transition effect
+            if transition_type == 'card':
+                transition_clip = create_card_transition_clip(processed_image_path, duration=3, video_size=video_size)
+            elif transition_type == 'filmstrip':
+                transition_clip = create_filmstrip_transition_clip(processed_image_path, duration=3, video_size=video_size)
+            else:  # default to carousel
+                transition_clip = create_carousel_clip(processed_image_path, duration=3, video_size=video_size)
+            
+            clips.append(transition_clip)
         
         # Concatenate all clips
         print("Concatenating clips...")
@@ -381,6 +563,9 @@ def generate_video_route():
         # Get checkbox value for background removal
         remove_bg = request.form.get('remove_background') == 'yes'
         
+        # Get transition type selection
+        transition_type = request.form.get('transition_type', 'carousel')
+        
         # Validate intro video
         if intro_video.filename == '':
             flash('No se seleccionó un video de introducción', 'error')
@@ -440,7 +625,7 @@ def generate_video_route():
         # Generate video
         print("Iniciando generación de video...")
         flash('Procesando video... Esto puede tomar varios minutos.', 'info')
-        generate_video(intro_path, product_image_paths, background_path, output_path, remove_bg)
+        generate_video(intro_path, product_image_paths, background_path, output_path, remove_bg, transition_type)
         
         # Clean up uploaded files
         print("Limpiando archivos temporales...")
