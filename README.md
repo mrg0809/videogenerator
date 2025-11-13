@@ -1,12 +1,12 @@
 # 🎬 Video Generator - Generador de Videos con Carrusel
 
-Aplicación web Flask que genera videos profesionales combinando un video de introducción con un carrusel de imágenes de productos. Incluye eliminación automática de fondo y reemplazo con fondos personalizados.
+Aplicación web Flask que genera videos profesionales combinando un video de introducción con un carrusel de imágenes de productos. Incluye eliminación automática de fondo mejorada, tres tipos de transiciones y reemplazo con fondos personalizados.
 
 ## ✨ Características
 
 - **Video de Introducción**: Añade un video al inicio del video final
-- **Carrusel de Productos**: Muestra hasta 5 imágenes con efecto de deslizamiento horizontal suave
-- **Eliminación de Fondo**: Remueve automáticamente el fondo de las imágenes de productos usando rembg
+- **3 Tipos de Transiciones**: Elige entre Carrusel (deslizamiento horizontal), Tarjetas (fade + slide lateral), o Cinta de Película (efecto vintage con scroll vertical)
+- **Eliminación de Fondo Mejorada**: Remueve automáticamente el fondo de las imágenes usando rembg con alpha matting para mejor precisión
 - **Fondos Personalizados**: Opción de usar una imagen personalizada como fondo para los productos
 - **Interfaz Web Intuitiva**: Interfaz moderna y fácil de usar
 - **Descarga Directa**: Descarga el video generado directamente desde el navegador
@@ -87,11 +87,16 @@ El servidor se iniciará en `http://localhost:5000`
    - **Imágenes de Productos** (obligatorio): Entre 1 y 5 imágenes (PNG, JPG, o JPEG)
    - **Fondo Personalizado** (opcional): Una imagen para usar como fondo (PNG, JPG, o JPEG)
 
-3. **Haz clic en "Generar Video"**
+3. **Selecciona el tipo de transición** entre imágenes:
+   - **Carrusel**: Deslizamiento horizontal suave con escalado
+   - **Tarjetas**: Fade out/in con deslizamiento lateral
+   - **Cinta de Película**: Efecto negativo vintage con scroll vertical
 
-4. **Espera** mientras se procesa el video (esto puede tomar varios minutos)
+4. **Haz clic en "Generar Video"**
 
-5. **Descarga** el video generado cuando esté listo
+5. **Espera** mientras se procesa el video (esto puede tomar varios minutos)
+
+6. **Descarga** el video generado cuando esté listo
 
 ## 📁 Estructura del Proyecto
 
@@ -137,21 +142,39 @@ python app.py
 
 ## 🎨 Personalización
 
-### Duración del Carrusel
+### Duración de las Transiciones
 
-Para cambiar la duración de cada imagen en el carrusel, edita el parámetro `duration` en la función `create_carousel_clip()` en `app.py`:
+Para cambiar la duración de cada imagen, edita el parámetro `duration` en las llamadas a las funciones de transición en `generate_video()` en `app.py`:
 
 ```python
-carousel_clip = create_carousel_clip(processed_image_path, duration=3, video_size=video_size)
+# Cambia el valor '3' a la duración deseada en segundos
+transition_clip = create_carousel_clip(processed_image_path, duration=3, video_size=video_size)
 ```
 
 ### Resolución del Video
 
 La resolución del video final se basa en el video de introducción. Para forzar una resolución específica, modifica el parámetro `target_size` en la función `remove_background_and_composite()`.
 
-### Efecto de Transición
+### Tipos de Transición
 
-El efecto de carrusel se puede personalizar modificando la función `position_func` dentro de `create_carousel_clip()` en `app.py`.
+La aplicación ofrece tres tipos de transiciones que los usuarios pueden seleccionar desde la interfaz web:
+
+1. **Carrusel** (`create_carousel_clip`): Deslizamiento horizontal con efecto de escalado
+2. **Tarjetas** (`create_card_transition_clip`): Fade con deslizamiento lateral
+3. **Cinta de Película** (`create_filmstrip_transition_clip`): Efecto vintage con bordes y perforaciones de película
+
+Puedes personalizar cada efecto modificando las funciones correspondientes en `app.py`.
+
+### Mejoras en la Eliminación de Fondo
+
+La eliminación de fondo ahora usa **alpha matting** para mejorar la detección de bordes y reducir la eliminación excesiva de espacios. Los parámetros se pueden ajustar en la función `remove_background_and_composite()`:
+
+```python
+output_bytes = remove(input_image, 
+                     alpha_matting=True, 
+                     alpha_matting_foreground_threshold=240,  # Ajustar entre 0-255
+                     alpha_matting_background_threshold=10)   # Ajustar entre 0-255
+```
 
 ## 🧪 Prueba Manual
 
