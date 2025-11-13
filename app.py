@@ -273,6 +273,8 @@ def create_card_transition_clip(image_path, duration=3, video_size=(1920, 1080))
         VideoClip: The created video clip with card transition effect
     """
     try:
+        print(f"DEBUG: create_card_transition_clip called with image_path={image_path}")
+        
         # Load image
         img = Image.open(image_path)
         img = img.resize(video_size, Image.Resampling.LANCZOS)
@@ -280,20 +282,21 @@ def create_card_transition_clip(image_path, duration=3, video_size=(1920, 1080))
         
         # Create ImageClip
         clip = ImageClip(img_array, duration=duration)
+        print(f"DEBUG: ImageClip created successfully")
         
         # Define position function for slide effect
         def position_func(t):
             progress = t / duration
             
             if progress < 0.3:
-                # Slide in from left with fade in - full width slide
+                # Slide in from left - full width slide
                 ease = progress / 0.3
-                ease = 1 - (1 - ease) ** 2  # Ease-out
+                ease = 1 - (1 - ease) ** 3  # Ease-out cubic
                 x = -video_size[0] * (1 - ease)
             elif progress > 0.7:
-                # Slide out to right with fade out - full width slide
+                # Slide out to right - full width slide
                 ease = (progress - 0.7) / 0.3
-                ease = ease ** 2  # Ease-in
+                ease = ease ** 3  # Ease-in cubic
                 x = video_size[0] * ease
             else:
                 # Stay centered
@@ -301,27 +304,13 @@ def create_card_transition_clip(image_path, duration=3, video_size=(1920, 1080))
             
             return (x, 'center')
         
-        # Define opacity function for fade effect
-        def opacity_func(t):
-            progress = t / duration
-            
-            if progress < 0.3:
-                # Fade in over 30% of duration
-                return progress / 0.3
-            elif progress > 0.7:
-                # Fade out over last 30% of duration
-                return 1 - ((progress - 0.7) / 0.3)
-            else:
-                # Full opacity
-                return 1.0
-        
-        # Apply position and opacity
-        print(f"DEBUG: Applying position_func: {type(position_func)}")
+        # Apply position
+        print(f"DEBUG: About to apply position_func")
         clip = clip.set_position(position_func)
         print(f"DEBUG: Position applied successfully")
-        print(f"DEBUG: Applying opacity_func: {type(opacity_func)}")
-        clip = clip.set_opacity(opacity_func)
-        print(f"DEBUG: Opacity applied successfully")
+        
+        # Note: Temporarily removed set_opacity to test if that's causing the issue
+        # The fade effect will be added back once we confirm position works
         
         return clip
     
