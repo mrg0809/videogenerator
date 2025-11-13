@@ -1,5 +1,6 @@
 import os
 import uuid
+import io
 from flask import Flask, request, render_template, redirect, url_for, send_from_directory, flash
 from werkzeug.utils import secure_filename
 from moviepy.editor import VideoFileClip, ImageClip, CompositeVideoClip, concatenate_videoclips
@@ -67,9 +68,11 @@ def remove_background_and_composite(product_image_path, background_image_path, o
         with open(product_image_path, 'rb') as f:
             input_image = f.read()
         
-        # Remove background
-        output_image = remove(input_image)
-        product_img = Image.open(output_image).convert("RGBA")
+        # Remove background - rembg.remove returns bytes
+        output_bytes = remove(input_image)
+        
+        # Convert bytes to PIL Image using BytesIO
+        product_img = Image.open(io.BytesIO(output_bytes)).convert("RGBA")
         
         # Create or load background
         if background_image_path and os.path.exists(background_image_path):
