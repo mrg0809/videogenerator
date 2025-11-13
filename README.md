@@ -42,6 +42,8 @@ brew install ffmpeg
 1. Descarga FFmpeg desde https://ffmpeg.org/download.html
 2. Extrae los archivos y añade la carpeta `bin` al PATH del sistema
 
+> **📌 USUARIOS DE WINDOWS**: Para una instalación fácil con scripts automáticos e instrucciones detalladas en español, consulta la [Guía de Instalación para Windows](WINDOWS_SETUP.md)
+
 ## 🚀 Instalación
 
 1. **Clonar el repositorio**:
@@ -72,6 +74,13 @@ pip install -r requirements.txt
 
 ### Iniciar el Servidor
 
+#### En Windows (Método Fácil):
+```cmd
+start_windows.bat
+```
+O haz doble clic en el acceso directo del escritorio (si lo creaste con `create_shortcut.bat`)
+
+#### En Linux/macOS o Windows (Método Manual):
 ```bash
 python app.py
 ```
