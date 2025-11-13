@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generador de Videos con Carrusel</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎬 Generador de Videos con Carrusel</h1>
+            <p class="subtitle">Crea videos profesionales con intro, carrusel de productos y fondos personalizados</p>
+        </header>
+
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="messages">
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        <!-- Upload Form -->
+        <div class="form-container">
+            <form method="POST" action="{{ url_for('generate_video_route') }}" enctype="multipart/form-data" id="uploadForm">
+                
+                <div class="form-group">
+                    <label for="intro_video">
+                        <span class="label-icon">🎥</span>
+                        Video de Introducción (requerido)
+                    </label>
+                    <input type="file" 
+                           id="intro_video" 
+                           name="intro_video" 
+                           accept="video/mp4,video/quicktime,video/x-msvideo" 
+                           required>
+                    <small>Formatos: MP4, MOV, AVI</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="product_images">
+                        <span class="label-icon">🖼️</span>
+                        Imágenes de Productos (1-5 imágenes, requerido)
+                    </label>
+                    <input type="file" 
+                           id="product_images" 
+                           name="product_images" 
+                           accept="image/png,image/jpeg,image/jpg" 
+                           multiple 
+                           required>
+                    <small>Formatos: PNG, JPG, JPEG | Máximo 5 imágenes</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="custom_background">
+                        <span class="label-icon">🎨</span>
+                        Fondo Personalizado (opcional)
+                    </label>
+                    <input type="file" 
+                           id="custom_background" 
+                           name="custom_background" 
+                           accept="image/png,image/jpeg,image/jpg">
+                    <small>Formatos: PNG, JPG, JPEG | Si no se proporciona, se usará un fondo blanco</small>
+                </div>
+
+                <div class="form-group checkbox-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" 
+                               id="remove_background" 
+                               name="remove_background" 
+                               value="yes"
+                               checked>
+                        <span class="checkbox-custom"></span>
+                        <span class="checkbox-text">
+                            <span class="label-icon">✂️</span>
+                            Eliminar fondo de las imágenes de productos
+                        </span>
+                    </label>
+                    <small>Si está activado, se removerá automáticamente el fondo de cada imagen de producto</small>
+                </div>
+
+                <div class="button-group">
+                    <button type="submit" class="btn btn-primary" id="submitBtn">
+                        <span class="btn-icon">✨</span>
+                        Generar Video
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Video Download Section -->
+        {% if video_filename %}
+        <div class="download-container">
+            <div class="success-message">
+                <h2>✅ ¡Video Generado Exitosamente!</h2>
+                <p>Tu video está listo para descargar</p>
+            </div>
+            <div class="download-actions">
+                <a href="{{ url_for('serve_video', filename=video_filename) }}" 
+                   class="btn btn-download" 
+                   download>
+                    <span class="btn-icon">⬇️</span>
+                    Descargar Video
+                </a>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Instructions -->
+        <div class="instructions">
+            <h3>📋 Instrucciones</h3>
+            <ol>
+                <li><strong>Video de Introducción:</strong> Selecciona un video que se mostrará al inicio del video final.</li>
+                <li><strong>Imágenes de Productos:</strong> Selecciona entre 1 y 5 imágenes de productos. El fondo de cada imagen será eliminado automáticamente.</li>
+                <li><strong>Fondo Personalizado:</strong> (Opcional) Sube una imagen que se usará como nuevo fondo para las imágenes de productos.</li>
+                <li><strong>Efecto Carrusel:</strong> Las imágenes se mostrarán con un efecto de deslizamiento horizontal suave.</li>
+                <li><strong>Procesamiento:</strong> El proceso puede tomar varios minutos dependiendo del tamaño de los archivos.</li>
+            </ol>
+        </div>
+
+        <!-- Features -->
+        <div class="features">
+            <h3>✨ Características</h3>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">🎬</div>
+                    <h4>Video de Intro</h4>
+                    <p>Añade un video de introducción profesional</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🖼️</div>
+                    <h4>Carrusel de Productos</h4>
+                    <p>Muestra tus productos con efecto deslizante</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">✂️</div>
+                    <h4>Eliminación de Fondo</h4>
+                    <p>Remueve automáticamente el fondo de las imágenes</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🎨</div>
+                    <h4>Fondo Personalizado</h4>
+                    <p>Usa tu propia imagen de fondo</p>
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <p>© 2024 Video Generator - Powered by Flask, MoviePy & rembg</p>
+        </footer>
+    </div>
+
+    <script>
+        // Form validation
+        document.getElementById('uploadForm').addEventListener('submit', function(e) {
+            const productImages = document.getElementById('product_images').files;
+            
+            if (productImages.length > 5) {
+                e.preventDefault();
+                alert('Por favor selecciona máximo 5 imágenes de productos.');
+                return false;
+            }
+            
+            if (productImages.length === 0) {
+                e.preventDefault();
+                alert('Por favor selecciona al menos una imagen de producto.');
+                return false;
+            }
+            
+            // Show loading state
+            const submitBtn = document.getElementById('submitBtn');
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="btn-icon">⏳</span> Procesando... Por favor espera';
+            submitBtn.classList.add('btn-loading');
+        });
+
+        // File input display
+        const fileInputs = document.querySelectorAll('input[type="file"]');
+        fileInputs.forEach(input => {
+            input.addEventListener('change', function() {
+                const fileCount = this.files.length;
+                if (fileCount > 0) {
+                    const label = this.previousElementSibling;
+                    if (fileCount === 1) {
+                        console.log(`Selected: ${this.files[0].name}`);
+                    } else {
+                        console.log(`Selected ${fileCount} files`);
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+</html>
