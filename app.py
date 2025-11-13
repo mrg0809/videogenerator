@@ -70,7 +70,8 @@ def remove_background_and_composite(product_image_path, background_image_path, o
         
         # Remove background with alpha matting for better edge quality
         # alpha_matting helps improve edge detection and reduce excessive removal
-        output_bytes = remove(input_image, alpha_matting=True, alpha_matting_foreground_threshold=240, alpha_matting_background_threshold=10)
+        # Adjusted parameters to avoid Cholesky decomposition warnings
+        output_bytes = remove(input_image, alpha_matting=True, alpha_matting_foreground_threshold=250, alpha_matting_background_threshold=20, alpha_matting_erode_size=10)
         
         # Convert bytes to PIL Image using BytesIO
         product_img = Image.open(io.BytesIO(output_bytes)).convert("RGBA")
@@ -193,18 +194,18 @@ def create_carousel_clip(image_path, duration=3, video_size=(1920, 1080)):
             # Progress from 0 to 1
             progress = t / duration
             
-            # Calculate position for modern slide effect
-            if progress < 0.2:
-                # Slide in from right
-                ease = progress / 0.2
+            # Calculate position for modern slide effect - increased distance for visibility
+            if progress < 0.3:
+                # Slide in from right - full width slide
+                ease = progress / 0.3
                 ease = 1 - (1 - ease) ** 3  # Ease-out cubic
-                x = video_size[0] * 0.4 * (1 - ease)
+                x = video_size[0] * (1 - ease)
                 
-            elif progress > 0.8:
-                # Slide out to left
-                ease = (progress - 0.8) / 0.2
+            elif progress > 0.7:
+                # Slide out to left - full width slide
+                ease = (progress - 0.7) / 0.3
                 ease = ease ** 3  # Ease-in cubic
-                x = -video_size[0] * 0.4 * ease
+                x = -video_size[0] * ease
                 
             else:
                 # Stay centered
@@ -217,18 +218,18 @@ def create_carousel_clip(image_path, duration=3, video_size=(1920, 1080)):
             # Progress from 0 to 1
             progress = t / duration
             
-            # Calculate scale for modern effect
-            if progress < 0.2:
-                # Scale up from 85% to 100%
-                ease = progress / 0.2
+            # Calculate scale for modern effect - more dramatic scaling
+            if progress < 0.3:
+                # Scale up from 70% to 100%
+                ease = progress / 0.3
                 ease = 1 - (1 - ease) ** 3  # Ease-out cubic
-                scale = 0.85 + (0.15 * ease)
+                scale = 0.7 + (0.3 * ease)
                 
-            elif progress > 0.8:
-                # Scale down from 100% to 85%
-                ease = (progress - 0.8) / 0.2
+            elif progress > 0.7:
+                # Scale down from 100% to 70%
+                ease = (progress - 0.7) / 0.3
                 ease = ease ** 3  # Ease-in cubic
-                scale = 1.0 - (0.15 * ease)
+                scale = 1.0 - (0.3 * ease)
                 
             else:
                 # Stay at full size
@@ -242,8 +243,7 @@ def create_carousel_clip(image_path, duration=3, video_size=(1920, 1080)):
         # Apply resize animation
         clip = clip.resize(lambda t: resize_func(t))
         
-        # Apply crossfade for smoother transitions between clips
-        clip = clip.crossfadein(0.3).crossfadeout(0.3)
+        # Note: No crossfade applied to preserve the transition effect
         
         return clip
     
@@ -278,16 +278,16 @@ def create_card_transition_clip(image_path, duration=3, video_size=(1920, 1080))
         def position_func(t):
             progress = t / duration
             
-            if progress < 0.25:
-                # Slide in from left with fade in
-                ease = progress / 0.25
+            if progress < 0.3:
+                # Slide in from left with fade in - full width slide
+                ease = progress / 0.3
                 ease = 1 - (1 - ease) ** 2  # Ease-out
-                x = -video_size[0] * 0.5 * (1 - ease)
-            elif progress > 0.75:
-                # Slide out to right with fade out
-                ease = (progress - 0.75) / 0.25
+                x = -video_size[0] * (1 - ease)
+            elif progress > 0.7:
+                # Slide out to right with fade out - full width slide
+                ease = (progress - 0.7) / 0.3
                 ease = ease ** 2  # Ease-in
-                x = video_size[0] * 0.5 * ease
+                x = video_size[0] * ease
             else:
                 # Stay centered
                 x = 0
@@ -298,12 +298,12 @@ def create_card_transition_clip(image_path, duration=3, video_size=(1920, 1080))
         def opacity_func(t):
             progress = t / duration
             
-            if progress < 0.25:
-                # Fade in
-                return progress / 0.25
-            elif progress > 0.75:
-                # Fade out
-                return 1 - ((progress - 0.75) / 0.25)
+            if progress < 0.3:
+                # Fade in over 30% of duration
+                return progress / 0.3
+            elif progress > 0.7:
+                # Fade out over last 30% of duration
+                return 1 - ((progress - 0.7) / 0.3)
             else:
                 # Full opacity
                 return 1.0
@@ -376,16 +376,16 @@ def create_filmstrip_transition_clip(image_path, duration=3, video_size=(1920, 1
         def position_func(t):
             progress = t / duration
             
-            if progress < 0.3:
-                # Scroll in from bottom
-                ease = progress / 0.3
+            if progress < 0.35:
+                # Scroll in from bottom - more dramatic movement
+                ease = progress / 0.35
                 ease = 1 - (1 - ease) ** 2  # Ease-out
-                y = video_size[1] * 0.3 * (1 - ease)
-            elif progress > 0.7:
-                # Scroll out to top
-                ease = (progress - 0.7) / 0.3
+                y = video_size[1] * (1 - ease)
+            elif progress > 0.65:
+                # Scroll out to top - more dramatic movement
+                ease = (progress - 0.65) / 0.35
                 ease = ease ** 2  # Ease-in
-                y = -video_size[1] * 0.3 * ease
+                y = -video_size[1] * ease
             else:
                 # Stay centered
                 y = 0
@@ -396,16 +396,16 @@ def create_filmstrip_transition_clip(image_path, duration=3, video_size=(1920, 1
         def resize_func(t):
             progress = t / duration
             
-            if progress < 0.3:
-                # Zoom in from 90% to 100%
-                ease = progress / 0.3
+            if progress < 0.35:
+                # Zoom in from 75% to 100% - more dramatic
+                ease = progress / 0.35
                 ease = 1 - (1 - ease) ** 2
-                scale = 0.9 + (0.1 * ease)
-            elif progress > 0.7:
-                # Zoom out from 100% to 90%
-                ease = (progress - 0.7) / 0.3
+                scale = 0.75 + (0.25 * ease)
+            elif progress > 0.65:
+                # Zoom out from 100% to 75% - more dramatic
+                ease = (progress - 0.65) / 0.35
                 ease = ease ** 2
-                scale = 1.0 - (0.1 * ease)
+                scale = 1.0 - (0.25 * ease)
             else:
                 # Stay at full size
                 scale = 1.0
@@ -416,8 +416,7 @@ def create_filmstrip_transition_clip(image_path, duration=3, video_size=(1920, 1
         clip = clip.set_position(position_func)
         clip = clip.resize(lambda t: resize_func(t))
         
-        # Slight fade for smoother transitions
-        clip = clip.crossfadein(0.2).crossfadeout(0.2)
+        # Note: No crossfade applied to preserve the filmstrip transition effect
         
         return clip
     
