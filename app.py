@@ -316,13 +316,19 @@ def create_card_transition_clip(image_path, duration=3, video_size=(1920, 1080))
                 return 1.0
         
         # Apply position and opacity
+        print(f"DEBUG: Applying position_func: {type(position_func)}")
         clip = clip.set_position(position_func)
+        print(f"DEBUG: Position applied successfully")
+        print(f"DEBUG: Applying opacity_func: {type(opacity_func)}")
         clip = clip.set_opacity(opacity_func)
+        print(f"DEBUG: Opacity applied successfully")
         
         return clip
     
     except Exception as e:
         print(f"Error creating card transition clip: {e}")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
         raise
 
 
