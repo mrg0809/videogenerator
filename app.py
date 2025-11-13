@@ -166,8 +166,9 @@ def composite_without_removal(product_image_path, background_image_path, output_
 
 def create_carousel_clip(image_path, duration=3, video_size=(1920, 1080)):
     """
-    Create a video clip with card-like carousel sliding effect for an image.
-    Enhanced with smooth acceleration and deceleration for a more polished look.
+    Create a video clip with modern sliding carousel effect.
+    Images scale down and slide to the side as they exit,
+    while maintaining a smooth, modern transition.
     
     Args:
         image_path: Path to the image
@@ -175,7 +176,7 @@ def create_carousel_clip(image_path, duration=3, video_size=(1920, 1080)):
         video_size: Size of the video (width, height)
     
     Returns:
-        VideoClip: The created video clip with carousel effect
+        VideoClip: The created video clip with modern carousel effect
     """
     try:
         # Load image
@@ -186,35 +187,61 @@ def create_carousel_clip(image_path, duration=3, video_size=(1920, 1080)):
         # Create ImageClip
         clip = ImageClip(img_array, duration=duration)
         
-        # Define position function for card-like sliding effect
+        # Define position function for modern sliding with scale effect
         def position_func(t):
             # Progress from 0 to 1
             progress = t / duration
             
-            # Card-like transition with smooth easing
-            # Using cubic ease-in-out for smoother, more natural motion
-            if progress < 0.25:
-                # Slide in from right with acceleration
-                ease = progress / 0.25
-                # Cubic ease-in: starts slow, accelerates
-                ease = ease * ease * ease
-                x = video_size[0] * (1 - ease)
-            elif progress > 0.75:
-                # Slide out to left with deceleration
-                ease = (progress - 0.75) / 0.25
-                # Cubic ease-out: starts fast, decelerates
-                ease = 1 - (1 - ease) ** 3
-                x = -video_size[0] * ease
+            # Calculate position for modern slide effect
+            if progress < 0.2:
+                # Slide in from right
+                ease = progress / 0.2
+                ease = 1 - (1 - ease) ** 3  # Ease-out cubic
+                x = video_size[0] * 0.4 * (1 - ease)
+                
+            elif progress > 0.8:
+                # Slide out to left
+                ease = (progress - 0.8) / 0.2
+                ease = ease ** 3  # Ease-in cubic
+                x = -video_size[0] * 0.4 * ease
+                
             else:
                 # Stay centered
                 x = 0
             
             return (x, 'center')
         
-        # Apply position function for smooth card-like motion
+        # Define resize function for scale effect
+        def resize_func(t):
+            # Progress from 0 to 1
+            progress = t / duration
+            
+            # Calculate scale for modern effect
+            if progress < 0.2:
+                # Scale up from 85% to 100%
+                ease = progress / 0.2
+                ease = 1 - (1 - ease) ** 3  # Ease-out cubic
+                scale = 0.85 + (0.15 * ease)
+                
+            elif progress > 0.8:
+                # Scale down from 100% to 85%
+                ease = (progress - 0.8) / 0.2
+                ease = ease ** 3  # Ease-in cubic
+                scale = 1.0 - (0.15 * ease)
+                
+            else:
+                # Stay at full size
+                scale = 1.0
+            
+            return scale
+        
+        # Apply position
         clip = clip.set_position(position_func)
         
-        # Apply subtle fade in/out for smoother transitions
+        # Apply resize animation
+        clip = clip.resize(lambda t: resize_func(t))
+        
+        # Apply crossfade for smoother transitions between clips
         clip = clip.crossfadein(0.3).crossfadeout(0.3)
         
         return clip

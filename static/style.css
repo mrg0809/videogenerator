@@ -142,43 +142,50 @@ header h1 {
 
 /* Checkbox Group */
 .checkbox-group {
-    background: #f8f9ff;
-    padding: 20px;
-    border-radius: 10px;
-    border: 2px solid #e0e7ff;
+    background: #f0f4ff;
+    padding: 25px;
+    border-radius: 12px;
+    border: 2px solid #667eea;
+    margin-bottom: 25px;
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.1);
 }
 
 .checkbox-label {
     display: flex;
     align-items: center;
     cursor: pointer;
-    font-size: 1.1em;
+    font-size: 1.15em;
     font-weight: 600;
     color: #333;
-    margin-bottom: 10px;
+    margin-bottom: 12px;
+    user-select: none;
 }
 
 .checkbox-label input[type="checkbox"] {
     position: absolute;
     opacity: 0;
     cursor: pointer;
+    width: 0;
+    height: 0;
 }
 
 .checkbox-custom {
     position: relative;
-    width: 24px;
-    height: 24px;
-    border: 2px solid #667eea;
-    border-radius: 6px;
+    width: 28px;
+    height: 28px;
+    border: 3px solid #667eea;
+    border-radius: 8px;
     background: white;
-    margin-right: 12px;
+    margin-right: 15px;
     transition: all 0.3s ease;
     flex-shrink: 0;
+    display: inline-block;
 }
 
 .checkbox-label input[type="checkbox"]:checked + .checkbox-custom {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     border-color: #667eea;
+    transform: scale(1.05);
 }
 
 .checkbox-label input[type="checkbox"]:checked + .checkbox-custom::after {
@@ -188,23 +195,28 @@ header h1 {
     left: 50%;
     transform: translate(-50%, -50%);
     color: white;
-    font-size: 16px;
+    font-size: 18px;
     font-weight: bold;
+    line-height: 1;
 }
 
 .checkbox-label:hover .checkbox-custom {
     border-color: #764ba2;
-    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.15);
+    transform: scale(1.02);
 }
 
 .checkbox-text {
     display: flex;
     align-items: center;
+    flex: 1;
 }
 
 .checkbox-group small {
-    margin-left: 36px;
-    color: #666;
+    margin-left: 43px;
+    color: #555;
+    font-size: 0.95em;
+    line-height: 1.4;
 }
 
 /* Buttons */
