@@ -4,7 +4,7 @@ import io
 from flask import Flask, request, render_template, redirect, url_for, send_from_directory, flash
 from werkzeug.utils import secure_filename
 from moviepy.editor import VideoFileClip, ImageClip, CompositeVideoClip, concatenate_videoclips
-from PIL import Image
+from PIL import Image, ImageDraw
 from rembg import remove
 import numpy as np
 
@@ -68,8 +68,17 @@ def remove_background_and_composite(product_image_path, background_image_path, o
         with open(product_image_path, 'rb') as f:
             input_image = f.read()
         
-        # Remove background - rembg.remove returns bytes
-        output_bytes = remove(input_image)
+        # Remove background with alpha matting for better edge quality
+        # alpha_matting helps improve edge detection and reduce excessive removal
+        # Using relaxed parameters to ensure matrix stability and avoid Cholesky warnings
+        # These settings prioritize stability while maintaining good edge quality
+        output_bytes = remove(
+            input_image, 
+            alpha_matting=True, 
+            alpha_matting_foreground_threshold=270,
+            alpha_matting_background_threshold=30,
+            alpha_matting_erode_size=15
+        )
         
         # Convert bytes to PIL Image using BytesIO
         product_img = Image.open(io.BytesIO(output_bytes)).convert("RGBA")
@@ -166,9 +175,8 @@ def composite_without_removal(product_image_path, background_image_path, output_
 
 def create_carousel_clip(image_path, duration=3, video_size=(1920, 1080)):
     """
-    Create a video clip with modern sliding carousel effect.
-    Images scale down and slide to the side as they exit,
-    while maintaining a smooth, modern transition.
+    Create a video clip with dramatic CapCut-style carousel effect.
+    Images slide with 3D-like perspective, rotation, and smooth scaling.
     
     Args:
         image_path: Path to the image
@@ -176,7 +184,7 @@ def create_carousel_clip(image_path, duration=3, video_size=(1920, 1080)):
         video_size: Size of the video (width, height)
     
     Returns:
-        VideoClip: The created video clip with modern carousel effect
+        VideoClip: The created video clip with dramatic carousel effect
     """
     try:
         # Load image
@@ -187,62 +195,53 @@ def create_carousel_clip(image_path, duration=3, video_size=(1920, 1080)):
         # Create ImageClip
         clip = ImageClip(img_array, duration=duration)
         
-        # Define position function for modern sliding with scale effect
+        # Define position function with dramatic sliding and perspective
         def position_func(t):
-            # Progress from 0 to 1
             progress = t / duration
             
-            # Calculate position for modern slide effect
-            if progress < 0.2:
-                # Slide in from right
-                ease = progress / 0.2
-                ease = 1 - (1 - ease) ** 3  # Ease-out cubic
-                x = video_size[0] * 0.4 * (1 - ease)
+            if progress < 0.35:
+                # Dramatic slide in from right with acceleration
+                ease = progress / 0.35
+                ease = 1 - (1 - ease) ** 4  # Ease-out quartic for smooth deceleration
+                x = video_size[0] * 1.5 * (1 - ease)  # Start from 1.5x width for drama
                 
-            elif progress > 0.8:
-                # Slide out to left
-                ease = (progress - 0.8) / 0.2
-                ease = ease ** 3  # Ease-in cubic
-                x = -video_size[0] * 0.4 * ease
+            elif progress > 0.65:
+                # Dramatic slide out to left with acceleration
+                ease = (progress - 0.65) / 0.35
+                ease = ease ** 4  # Ease-in quartic for acceleration
+                x = -video_size[0] * 1.5 * ease  # Exit to -1.5x width
                 
             else:
-                # Stay centered
+                # Stay perfectly centered
                 x = 0
             
             return (x, 'center')
         
-        # Define resize function for scale effect
+        # Define resize function with dramatic scaling
         def resize_func(t):
-            # Progress from 0 to 1
             progress = t / duration
             
-            # Calculate scale for modern effect
-            if progress < 0.2:
-                # Scale up from 85% to 100%
-                ease = progress / 0.2
-                ease = 1 - (1 - ease) ** 3  # Ease-out cubic
-                scale = 0.85 + (0.15 * ease)
+            if progress < 0.35:
+                # Zoom in dramatically from 60% to 105% (slight overshoot)
+                ease = progress / 0.35
+                ease = 1 - (1 - ease) ** 4  # Ease-out quartic
+                scale = 0.6 + (0.45 * ease)
                 
-            elif progress > 0.8:
-                # Scale down from 100% to 85%
-                ease = (progress - 0.8) / 0.2
-                ease = ease ** 3  # Ease-in cubic
-                scale = 1.0 - (0.15 * ease)
+            elif progress > 0.65:
+                # Zoom out dramatically from 105% to 60%
+                ease = (progress - 0.65) / 0.35
+                ease = ease ** 4  # Ease-in quartic
+                scale = 1.05 - (0.45 * ease)
                 
             else:
-                # Stay at full size
-                scale = 1.0
+                # Stay at 105% for emphasis
+                scale = 1.05
             
             return scale
         
-        # Apply position
+        # Apply position and resize for dramatic effect
         clip = clip.set_position(position_func)
-        
-        # Apply resize animation
-        clip = clip.resize(lambda t: resize_func(t))
-        
-        # Apply crossfade for smoother transitions between clips
-        clip = clip.crossfadein(0.3).crossfadeout(0.3)
+        clip = clip.resize(resize_func)
         
         return clip
     
@@ -251,9 +250,192 @@ def create_carousel_clip(image_path, duration=3, video_size=(1920, 1080)):
         raise
 
 
-def generate_video(intro_path, product_images, background_image_path, output_path, remove_bg=True):
+def create_card_transition_clip(image_path, duration=3, video_size=(1920, 1080)):
     """
-    Generate the final video with intro and carousel of product images.
+    Create a video clip with dramatic card-flip style transition.
+    Images slide with perspective and scaling for a modern CapCut look.
+    
+    Args:
+        image_path: Path to the image
+        duration: Duration of the clip in seconds
+        video_size: Size of the video (width, height)
+    
+    Returns:
+        VideoClip: The created video clip with card transition effect
+    """
+    try:
+        # Load image
+        img = Image.open(image_path)
+        img = img.resize(video_size, Image.Resampling.LANCZOS)
+        img_array = np.array(img)
+        
+        # Create ImageClip
+        clip = ImageClip(img_array, duration=duration)
+        
+        # Define position function for card-flip slide effect
+        def position_func(t):
+            progress = t / duration
+            
+            if progress < 0.35:
+                # Slide in from bottom-left with curve
+                ease = progress / 0.35
+                ease = 1 - (1 - ease) ** 4  # Ease-out quartic
+                x = -video_size[0] * 0.8 * (1 - ease)
+                y = video_size[1] * 0.4 * (1 - ease)
+            elif progress > 0.65:
+                # Slide out to top-right with curve
+                ease = (progress - 0.65) / 0.35
+                ease = ease ** 4  # Ease-in quartic
+                x = video_size[0] * 0.8 * ease
+                y = -video_size[1] * 0.4 * ease
+            else:
+                # Stay centered
+                x = 0
+                y = 0
+            
+            return (x, y)
+        
+        # Define resize function for dramatic zoom
+        def resize_func(t):
+            progress = t / duration
+            
+            if progress < 0.35:
+                # Zoom in from 50% to 110% for impact
+                ease = progress / 0.35
+                ease = 1 - (1 - ease) ** 4
+                scale = 0.5 + (0.6 * ease)
+            elif progress > 0.65:
+                # Zoom out from 110% to 50%
+                ease = (progress - 0.65) / 0.35
+                ease = ease ** 4
+                scale = 1.1 - (0.6 * ease)
+            else:
+                # Stay at 110% for emphasis
+                scale = 1.1
+            
+            return scale
+        
+        # Apply position and scaling
+        clip = clip.set_position(position_func)
+        clip = clip.resize(resize_func)
+        
+        return clip
+    
+    except Exception as e:
+        print(f"Error creating card transition clip: {e}")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
+        raise
+
+
+def create_filmstrip_transition_clip(image_path, duration=3, video_size=(1920, 1080)):
+    """
+    Create a video clip with dramatic vintage film strip effect.
+    Vertical scrolling with cinematic borders and sprocket holes.
+    
+    Args:
+        image_path: Path to the image
+        duration: Duration of the clip in seconds
+        video_size: Size of the video (width, height)
+    
+    Returns:
+        VideoClip: The created video clip with film strip transition effect
+    """
+    try:
+        # Load and prepare the main image
+        img = Image.open(image_path)
+        img = img.resize(video_size, Image.Resampling.LANCZOS)
+        
+        # Create film strip frame effect with vintage borders
+        border_size = int(video_size[1] * 0.08)  # 8% of height for borders
+        
+        # Create vintage film background
+        film_bg = Image.new('RGB', video_size, (35, 30, 25))  # Dark brownish-gray
+        
+        # Calculate image size with borders
+        img_height = video_size[1] - (2 * border_size)
+        img_width = video_size[0]
+        img_resized = img.resize((img_width, img_height), Image.Resampling.LANCZOS)
+        
+        # Paste image on film background
+        film_bg.paste(img_resized, (0, border_size))
+        
+        # Add film sprocket holes effect (authentic film perforations)
+        draw = ImageDraw.Draw(film_bg)
+        hole_width = int(video_size[0] * 0.04)
+        hole_height = int(border_size * 0.65)
+        hole_color = (0, 0, 0)
+        
+        # Top border holes - evenly spaced
+        for i in range(0, video_size[0], int(video_size[0] * 0.08)):
+            draw.rectangle([i, border_size//4, i + hole_width, border_size//4 + hole_height], fill=hole_color)
+        
+        # Bottom border holes - evenly spaced
+        for i in range(0, video_size[0], int(video_size[0] * 0.08)):
+            y_pos = video_size[1] - border_size + border_size//4
+            draw.rectangle([i, y_pos, i + hole_width, y_pos + hole_height], fill=hole_color)
+        
+        img_array = np.array(film_bg)
+        
+        # Create ImageClip
+        clip = ImageClip(img_array, duration=duration)
+        
+        # Define position function for cinematic vertical scrolling
+        def position_func(t):
+            progress = t / duration
+            
+            if progress < 0.4:
+                # Dramatic scroll in from bottom
+                ease = progress / 0.4
+                ease = 1 - (1 - ease) ** 4  # Ease-out quartic for smooth stop
+                y = video_size[1] * 1.3 * (1 - ease)
+            elif progress > 0.6:
+                # Dramatic scroll out to top
+                ease = (progress - 0.6) / 0.4
+                ease = ease ** 4  # Ease-in quartic for acceleration
+                y = -video_size[1] * 1.3 * ease
+            else:
+                # Hold centered for impact
+                y = 0
+            
+            return ('center', y)
+        
+        # Define resize function for cinematic zoom
+        def resize_func(t):
+            progress = t / duration
+            
+            if progress < 0.4:
+                # Cinematic zoom in from 65% to 108%
+                ease = progress / 0.4
+                ease = 1 - (1 - ease) ** 3
+                scale = 0.65 + (0.43 * ease)
+            elif progress > 0.6:
+                # Cinematic zoom out from 108% to 65%
+                ease = (progress - 0.6) / 0.4
+                ease = ease ** 3
+                scale = 1.08 - (0.43 * ease)
+            else:
+                # Hold at 108% for cinematic effect
+                scale = 1.08
+            
+            return scale
+        
+        # Apply cinematic effects
+        clip = clip.set_position(position_func)
+        clip = clip.resize(resize_func)
+        
+        # Note: No crossfade applied to preserve the filmstrip transition effect
+        
+        return clip
+    
+    except Exception as e:
+        print(f"Error creating filmstrip transition clip: {e}")
+        raise
+
+
+def generate_video(intro_path, product_images, background_image_path, output_path, remove_bg=True, transition_type='carousel'):
+    """
+    Generate the final video with intro and product images using selected transition effect.
     
     Args:
         intro_path: Path to intro video
@@ -261,6 +443,7 @@ def generate_video(intro_path, product_images, background_image_path, output_pat
         background_image_path: Path to custom background image (can be None)
         output_path: Path to save the output video
         remove_bg: Whether to remove background from images (default: True)
+        transition_type: Type of transition ('carousel', 'card', or 'filmstrip')
     
     Returns:
         str: Path to the generated video
@@ -306,9 +489,15 @@ def generate_video(intro_path, product_images, background_image_path, output_pat
                     video_size
                 )
             
-            # Create carousel clip with card effect
-            carousel_clip = create_carousel_clip(processed_image_path, duration=3, video_size=video_size)
-            clips.append(carousel_clip)
+            # Create clip with selected transition effect
+            if transition_type == 'card':
+                transition_clip = create_card_transition_clip(processed_image_path, duration=3, video_size=video_size)
+            elif transition_type == 'filmstrip':
+                transition_clip = create_filmstrip_transition_clip(processed_image_path, duration=3, video_size=video_size)
+            else:  # default to carousel
+                transition_clip = create_carousel_clip(processed_image_path, duration=3, video_size=video_size)
+            
+            clips.append(transition_clip)
         
         # Concatenate all clips
         print("Concatenating clips...")
@@ -381,6 +570,9 @@ def generate_video_route():
         # Get checkbox value for background removal
         remove_bg = request.form.get('remove_background') == 'yes'
         
+        # Get transition type selection
+        transition_type = request.form.get('transition_type', 'carousel')
+        
         # Validate intro video
         if intro_video.filename == '':
             flash('No se seleccionó un video de introducción', 'error')
@@ -440,7 +632,7 @@ def generate_video_route():
         # Generate video
         print("Iniciando generación de video...")
         flash('Procesando video... Esto puede tomar varios minutos.', 'info')
-        generate_video(intro_path, product_image_paths, background_path, output_path, remove_bg)
+        generate_video(intro_path, product_image_paths, background_path, output_path, remove_bg, transition_type)
         
         # Clean up uploaded files
         print("Limpiando archivos temporales...")
