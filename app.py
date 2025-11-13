@@ -317,7 +317,7 @@ def create_card_transition_clip(image_path, duration=3, video_size=(1920, 1080))
         
         # Apply position and opacity
         clip = clip.set_position(position_func)
-        clip = clip.set_opacity(lambda t: opacity_func(t))
+        clip = clip.set_opacity(opacity_func)
         
         return clip
     
