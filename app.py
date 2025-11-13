@@ -111,9 +111,63 @@ def remove_background_and_composite(product_image_path, background_image_path, o
         raise
 
 
+def composite_without_removal(product_image_path, background_image_path, output_path, target_size=(1920, 1080)):
+    """
+    Composite product image onto background without removing its background.
+    
+    Args:
+        product_image_path: Path to the product image
+        background_image_path: Path to the background image (can be None)
+        output_path: Path to save the result
+        target_size: Target size for the output image (width, height)
+    
+    Returns:
+        str: Path to the processed image
+    """
+    try:
+        # Load product image
+        product_img = Image.open(product_image_path).convert("RGB")
+        
+        # Create or load background
+        if background_image_path and os.path.exists(background_image_path):
+            background = Image.open(background_image_path).convert("RGB")
+            background = background.resize(target_size, Image.Resampling.LANCZOS)
+        else:
+            # Default white background
+            background = Image.new('RGB', target_size, (255, 255, 255))
+        
+        # Scale product to fit within background while maintaining aspect ratio
+        product_width, product_height = product_img.size
+        bg_width, bg_height = target_size
+        
+        # Calculate scaling factor (use 80% of background size max)
+        scale_factor = min((bg_width * 0.8) / product_width, (bg_height * 0.8) / product_height)
+        new_width = int(product_width * scale_factor)
+        new_height = int(product_height * scale_factor)
+        
+        product_img = product_img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+        
+        # Calculate position to center the product
+        x = (bg_width - new_width) // 2
+        y = (bg_height - new_height) // 2
+        
+        # Paste product onto background
+        background.paste(product_img, (x, y))
+        
+        # Save the final image
+        background.save(output_path, 'JPEG', quality=95)
+        
+        return output_path
+    
+    except Exception as e:
+        print(f"Error compositing image: {e}")
+        raise
+
+
 def create_carousel_clip(image_path, duration=3, video_size=(1920, 1080)):
     """
-    Create a video clip with carousel sliding effect for an image.
+    Create a video clip with card-like carousel sliding effect for an image.
+    Enhanced with smooth acceleration and deceleration for a more polished look.
     
     Args:
         image_path: Path to the image
@@ -132,20 +186,24 @@ def create_carousel_clip(image_path, duration=3, video_size=(1920, 1080)):
         # Create ImageClip
         clip = ImageClip(img_array, duration=duration)
         
-        # Define position function for sliding effect
-        # Slide from right to center
+        # Define position function for card-like sliding effect
         def position_func(t):
             # Progress from 0 to 1
             progress = t / duration
             
-            # Smooth easing function (ease-in-out)
-            if progress < 0.2:
-                # Slide in from right
-                ease = progress / 0.2
+            # Card-like transition with smooth easing
+            # Using cubic ease-in-out for smoother, more natural motion
+            if progress < 0.25:
+                # Slide in from right with acceleration
+                ease = progress / 0.25
+                # Cubic ease-in: starts slow, accelerates
+                ease = ease * ease * ease
                 x = video_size[0] * (1 - ease)
-            elif progress > 0.8:
-                # Slide out to left
-                ease = (progress - 0.8) / 0.2
+            elif progress > 0.75:
+                # Slide out to left with deceleration
+                ease = (progress - 0.75) / 0.25
+                # Cubic ease-out: starts fast, decelerates
+                ease = 1 - (1 - ease) ** 3
                 x = -video_size[0] * ease
             else:
                 # Stay centered
@@ -153,8 +211,11 @@ def create_carousel_clip(image_path, duration=3, video_size=(1920, 1080)):
             
             return (x, 'center')
         
-        # Apply position function
+        # Apply position function for smooth card-like motion
         clip = clip.set_position(position_func)
+        
+        # Apply subtle fade in/out for smoother transitions
+        clip = clip.crossfadein(0.3).crossfadeout(0.3)
         
         return clip
     
@@ -163,7 +224,7 @@ def create_carousel_clip(image_path, duration=3, video_size=(1920, 1080)):
         raise
 
 
-def generate_video(intro_path, product_images, background_image_path, output_path):
+def generate_video(intro_path, product_images, background_image_path, output_path, remove_bg=True):
     """
     Generate the final video with intro and carousel of product images.
     
@@ -172,6 +233,7 @@ def generate_video(intro_path, product_images, background_image_path, output_pat
         product_images: List of paths to product images
         background_image_path: Path to custom background image (can be None)
         output_path: Path to save the output video
+        remove_bg: Whether to remove background from images (default: True)
     
     Returns:
         str: Path to the generated video
@@ -200,15 +262,24 @@ def generate_video(intro_path, product_images, background_image_path, output_pat
             )
             processed_images.append(processed_image_path)
             
-            # Remove background and composite
-            remove_background_and_composite(
-                product_image, 
-                background_image_path, 
-                processed_image_path,
-                video_size
-            )
+            # Remove background and composite if requested
+            if remove_bg:
+                remove_background_and_composite(
+                    product_image, 
+                    background_image_path, 
+                    processed_image_path,
+                    video_size
+                )
+            else:
+                # Just resize and optionally composite on background without removing bg
+                composite_without_removal(
+                    product_image,
+                    background_image_path,
+                    processed_image_path,
+                    video_size
+                )
             
-            # Create carousel clip
+            # Create carousel clip with card effect
             carousel_clip = create_carousel_clip(processed_image_path, duration=3, video_size=video_size)
             clips.append(carousel_clip)
         
@@ -280,6 +351,9 @@ def generate_video_route():
         product_images = request.files.getlist('product_images')
         custom_background = request.files.get('custom_background')
         
+        # Get checkbox value for background removal
+        remove_bg = request.form.get('remove_background') == 'yes'
+        
         # Validate intro video
         if intro_video.filename == '':
             flash('No se seleccionó un video de introducción', 'error')
@@ -339,7 +413,7 @@ def generate_video_route():
         # Generate video
         print("Iniciando generación de video...")
         flash('Procesando video... Esto puede tomar varios minutos.', 'info')
-        generate_video(intro_path, product_image_paths, background_path, output_path)
+        generate_video(intro_path, product_image_paths, background_path, output_path, remove_bg)
         
         # Clean up uploaded files
         print("Limpiando archivos temporales...")
