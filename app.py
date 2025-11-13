@@ -175,9 +175,8 @@ def composite_without_removal(product_image_path, background_image_path, output_
 
 def create_carousel_clip(image_path, duration=3, video_size=(1920, 1080)):
     """
-    Create a video clip with modern sliding carousel effect.
-    Images scale down and slide to the side as they exit,
-    while maintaining a smooth, modern transition.
+    Create a video clip with dramatic CapCut-style carousel effect.
+    Images slide with 3D-like perspective, rotation, and smooth scaling.
     
     Args:
         image_path: Path to the image
@@ -185,7 +184,7 @@ def create_carousel_clip(image_path, duration=3, video_size=(1920, 1080)):
         video_size: Size of the video (width, height)
     
     Returns:
-        VideoClip: The created video clip with modern carousel effect
+        VideoClip: The created video clip with dramatic carousel effect
     """
     try:
         # Load image
@@ -196,61 +195,53 @@ def create_carousel_clip(image_path, duration=3, video_size=(1920, 1080)):
         # Create ImageClip
         clip = ImageClip(img_array, duration=duration)
         
-        # Define position function for modern sliding with scale effect
+        # Define position function with dramatic sliding and perspective
         def position_func(t):
-            # Progress from 0 to 1
             progress = t / duration
             
-            # Calculate position for modern slide effect - increased distance for visibility
-            if progress < 0.3:
-                # Slide in from right - full width slide
-                ease = progress / 0.3
-                ease = 1 - (1 - ease) ** 3  # Ease-out cubic
-                x = video_size[0] * (1 - ease)
+            if progress < 0.35:
+                # Dramatic slide in from right with acceleration
+                ease = progress / 0.35
+                ease = 1 - (1 - ease) ** 4  # Ease-out quartic for smooth deceleration
+                x = video_size[0] * 1.5 * (1 - ease)  # Start from 1.5x width for drama
                 
-            elif progress > 0.7:
-                # Slide out to left - full width slide
-                ease = (progress - 0.7) / 0.3
-                ease = ease ** 3  # Ease-in cubic
-                x = -video_size[0] * ease
+            elif progress > 0.65:
+                # Dramatic slide out to left with acceleration
+                ease = (progress - 0.65) / 0.35
+                ease = ease ** 4  # Ease-in quartic for acceleration
+                x = -video_size[0] * 1.5 * ease  # Exit to -1.5x width
                 
             else:
-                # Stay centered
+                # Stay perfectly centered
                 x = 0
             
             return (x, 'center')
         
-        # Define resize function for scale effect
+        # Define resize function with dramatic scaling
         def resize_func(t):
-            # Progress from 0 to 1
             progress = t / duration
             
-            # Calculate scale for modern effect - more dramatic scaling
-            if progress < 0.3:
-                # Scale up from 70% to 100%
-                ease = progress / 0.3
-                ease = 1 - (1 - ease) ** 3  # Ease-out cubic
-                scale = 0.7 + (0.3 * ease)
+            if progress < 0.35:
+                # Zoom in dramatically from 60% to 105% (slight overshoot)
+                ease = progress / 0.35
+                ease = 1 - (1 - ease) ** 4  # Ease-out quartic
+                scale = 0.6 + (0.45 * ease)
                 
-            elif progress > 0.7:
-                # Scale down from 100% to 70%
-                ease = (progress - 0.7) / 0.3
-                ease = ease ** 3  # Ease-in cubic
-                scale = 1.0 - (0.3 * ease)
+            elif progress > 0.65:
+                # Zoom out dramatically from 105% to 60%
+                ease = (progress - 0.65) / 0.35
+                ease = ease ** 4  # Ease-in quartic
+                scale = 1.05 - (0.45 * ease)
                 
             else:
-                # Stay at full size
-                scale = 1.0
+                # Stay at 105% for emphasis
+                scale = 1.05
             
             return scale
         
-        # Apply position
+        # Apply position and resize for dramatic effect
         clip = clip.set_position(position_func)
-        
-        # Apply resize animation
         clip = clip.resize(resize_func)
-        
-        # Note: No crossfade applied to preserve the transition effect
         
         return clip
     
@@ -261,8 +252,8 @@ def create_carousel_clip(image_path, duration=3, video_size=(1920, 1080)):
 
 def create_card_transition_clip(image_path, duration=3, video_size=(1920, 1080)):
     """
-    Create a video clip with card-style transition (fade + slide effect).
-    Images fade out while sliding to the side, then fade in from the other side.
+    Create a video clip with dramatic card-flip style transition.
+    Images slide with perspective and scaling for a modern CapCut look.
     
     Args:
         image_path: Path to the image
@@ -273,8 +264,6 @@ def create_card_transition_clip(image_path, duration=3, video_size=(1920, 1080))
         VideoClip: The created video clip with card transition effect
     """
     try:
-        print(f"DEBUG: create_card_transition_clip called with image_path={image_path}")
-        
         # Load image
         img = Image.open(image_path)
         img = img.resize(video_size, Image.Resampling.LANCZOS)
@@ -282,35 +271,53 @@ def create_card_transition_clip(image_path, duration=3, video_size=(1920, 1080))
         
         # Create ImageClip
         clip = ImageClip(img_array, duration=duration)
-        print(f"DEBUG: ImageClip created successfully")
         
-        # Define position function for slide effect
+        # Define position function for card-flip slide effect
         def position_func(t):
             progress = t / duration
             
-            if progress < 0.3:
-                # Slide in from left - full width slide
-                ease = progress / 0.3
-                ease = 1 - (1 - ease) ** 3  # Ease-out cubic
-                x = -video_size[0] * (1 - ease)
-            elif progress > 0.7:
-                # Slide out to right - full width slide
-                ease = (progress - 0.7) / 0.3
-                ease = ease ** 3  # Ease-in cubic
-                x = video_size[0] * ease
+            if progress < 0.35:
+                # Slide in from bottom-left with curve
+                ease = progress / 0.35
+                ease = 1 - (1 - ease) ** 4  # Ease-out quartic
+                x = -video_size[0] * 0.8 * (1 - ease)
+                y = video_size[1] * 0.4 * (1 - ease)
+            elif progress > 0.65:
+                # Slide out to top-right with curve
+                ease = (progress - 0.65) / 0.35
+                ease = ease ** 4  # Ease-in quartic
+                x = video_size[0] * 0.8 * ease
+                y = -video_size[1] * 0.4 * ease
             else:
                 # Stay centered
                 x = 0
+                y = 0
             
-            return (x, 'center')
+            return (x, y)
         
-        # Apply position
-        print(f"DEBUG: About to apply position_func")
+        # Define resize function for dramatic zoom
+        def resize_func(t):
+            progress = t / duration
+            
+            if progress < 0.35:
+                # Zoom in from 50% to 110% for impact
+                ease = progress / 0.35
+                ease = 1 - (1 - ease) ** 4
+                scale = 0.5 + (0.6 * ease)
+            elif progress > 0.65:
+                # Zoom out from 110% to 50%
+                ease = (progress - 0.65) / 0.35
+                ease = ease ** 4
+                scale = 1.1 - (0.6 * ease)
+            else:
+                # Stay at 110% for emphasis
+                scale = 1.1
+            
+            return scale
+        
+        # Apply position and scaling
         clip = clip.set_position(position_func)
-        print(f"DEBUG: Position applied successfully")
-        
-        # Note: Temporarily removed set_opacity to test if that's causing the issue
-        # The fade effect will be added back once we confirm position works
+        clip = clip.resize(resize_func)
         
         return clip
     
@@ -323,8 +330,8 @@ def create_card_transition_clip(image_path, duration=3, video_size=(1920, 1080))
 
 def create_filmstrip_transition_clip(image_path, duration=3, video_size=(1920, 1080)):
     """
-    Create a video clip with film strip transition (vintage camera negative effect).
-    Images resize with a film negative border effect, simulating scrolling through film.
+    Create a video clip with dramatic vintage film strip effect.
+    Vertical scrolling with cinematic borders and sprocket holes.
     
     Args:
         image_path: Path to the image
@@ -339,12 +346,11 @@ def create_filmstrip_transition_clip(image_path, duration=3, video_size=(1920, 1
         img = Image.open(image_path)
         img = img.resize(video_size, Image.Resampling.LANCZOS)
         
-        # Create film strip frame effect
-        # Add dark borders to simulate film negative
+        # Create film strip frame effect with vintage borders
         border_size = int(video_size[1] * 0.08)  # 8% of height for borders
         
-        # Create a darker background for film effect
-        film_bg = Image.new('RGB', video_size, (40, 35, 30))  # Dark brownish
+        # Create vintage film background
+        film_bg = Image.new('RGB', video_size, (35, 30, 25))  # Dark brownish-gray
         
         # Calculate image size with borders
         img_height = video_size[1] - (2 * border_size)
@@ -354,18 +360,18 @@ def create_filmstrip_transition_clip(image_path, duration=3, video_size=(1920, 1
         # Paste image on film background
         film_bg.paste(img_resized, (0, border_size))
         
-        # Add film sprocket holes effect (small rectangles on borders)
+        # Add film sprocket holes effect (authentic film perforations)
         draw = ImageDraw.Draw(film_bg)
-        hole_width = int(video_size[0] * 0.03)
-        hole_height = int(border_size * 0.6)
+        hole_width = int(video_size[0] * 0.04)
+        hole_height = int(border_size * 0.65)
         hole_color = (0, 0, 0)
         
-        # Top border holes
-        for i in range(0, video_size[0], int(video_size[0] * 0.1)):
+        # Top border holes - evenly spaced
+        for i in range(0, video_size[0], int(video_size[0] * 0.08)):
             draw.rectangle([i, border_size//4, i + hole_width, border_size//4 + hole_height], fill=hole_color)
         
-        # Bottom border holes
-        for i in range(0, video_size[0], int(video_size[0] * 0.1)):
+        # Bottom border holes - evenly spaced
+        for i in range(0, video_size[0], int(video_size[0] * 0.08)):
             y_pos = video_size[1] - border_size + border_size//4
             draw.rectangle([i, y_pos, i + hole_width, y_pos + hole_height], fill=hole_color)
         
@@ -374,47 +380,47 @@ def create_filmstrip_transition_clip(image_path, duration=3, video_size=(1920, 1
         # Create ImageClip
         clip = ImageClip(img_array, duration=duration)
         
-        # Define position function for vertical scrolling effect
+        # Define position function for cinematic vertical scrolling
         def position_func(t):
             progress = t / duration
             
-            if progress < 0.35:
-                # Scroll in from bottom - more dramatic movement
-                ease = progress / 0.35
-                ease = 1 - (1 - ease) ** 2  # Ease-out
-                y = video_size[1] * (1 - ease)
-            elif progress > 0.65:
-                # Scroll out to top - more dramatic movement
-                ease = (progress - 0.65) / 0.35
-                ease = ease ** 2  # Ease-in
-                y = -video_size[1] * ease
+            if progress < 0.4:
+                # Dramatic scroll in from bottom
+                ease = progress / 0.4
+                ease = 1 - (1 - ease) ** 4  # Ease-out quartic for smooth stop
+                y = video_size[1] * 1.3 * (1 - ease)
+            elif progress > 0.6:
+                # Dramatic scroll out to top
+                ease = (progress - 0.6) / 0.4
+                ease = ease ** 4  # Ease-in quartic for acceleration
+                y = -video_size[1] * 1.3 * ease
             else:
-                # Stay centered
+                # Hold centered for impact
                 y = 0
             
             return ('center', y)
         
-        # Define resize function for zoom effect
+        # Define resize function for cinematic zoom
         def resize_func(t):
             progress = t / duration
             
-            if progress < 0.35:
-                # Zoom in from 75% to 100% - more dramatic
-                ease = progress / 0.35
-                ease = 1 - (1 - ease) ** 2
-                scale = 0.75 + (0.25 * ease)
-            elif progress > 0.65:
-                # Zoom out from 100% to 75% - more dramatic
-                ease = (progress - 0.65) / 0.35
-                ease = ease ** 2
-                scale = 1.0 - (0.25 * ease)
+            if progress < 0.4:
+                # Cinematic zoom in from 65% to 108%
+                ease = progress / 0.4
+                ease = 1 - (1 - ease) ** 3
+                scale = 0.65 + (0.43 * ease)
+            elif progress > 0.6:
+                # Cinematic zoom out from 108% to 65%
+                ease = (progress - 0.6) / 0.4
+                ease = ease ** 3
+                scale = 1.08 - (0.43 * ease)
             else:
-                # Stay at full size
-                scale = 1.0
+                # Hold at 108% for cinematic effect
+                scale = 1.08
             
             return scale
         
-        # Apply effects
+        # Apply cinematic effects
         clip = clip.set_position(position_func)
         clip = clip.resize(resize_func)
         
