@@ -1,6 +1,6 @@
 # 🎬 Video Generator - Generador de Videos Profesionales
 
-Aplicación web Flask que genera videos profesionales con dos modos principales: **Carrusel de Productos** (combina video de introducción con múltiples productos) y **Animación de Producto** (crea videos animados de productos individuales con efectos de movimiento y rotación). Incluye eliminación automática de fondo mejorada y fondos personalizados.
+Aplicación web Flask que genera videos profesionales con tres modos principales: **Carrusel de Productos** (combina video de introducción con múltiples productos), **Animación de Producto** (crea videos animados de productos individuales con efectos de movimiento y rotación), y **Efecto 3D Spin** (genera rotaciones 3D realistas usando transformaciones de perspectiva). Incluye eliminación automática de fondo mejorada y fondos personalizados.
 
 ## ✨ Características
 
@@ -9,7 +9,7 @@ Aplicación web Flask que genera videos profesionales con dos modos principales:
 - **3 Tipos de Transiciones**: Elige entre Carrusel (deslizamiento horizontal), Tarjetas (fade + slide lateral), o Cinta de Película (efecto vintage con scroll vertical)
 - **Múltiples Productos**: Combina hasta 5 imágenes de productos con transiciones suaves
 
-### 🔄 Modo Animación de Producto (NUEVO)
+### 🔄 Modo Animación de Producto
 - **Animación de Producto Individual**: Crea videos animados de un solo producto
 - **4 Tipos de Animación**: 
   - Rotación 360° (una vuelta completa)
@@ -17,6 +17,13 @@ Aplicación web Flask que genera videos profesionales con dos modos principales:
   - Zoom In/Out (acercamiento y alejamiento)
   - Flotante (movimiento suave arriba/abajo)
 - **Duración Configurable**: Elige entre 3, 5, 8 o 10 segundos
+
+### 🌀 Modo Efecto 3D Spin (NUEVO)
+- **Rotación 3D Realista**: Genera videos con efecto de rotación 360° simulando perspectiva 3D usando transformaciones de OpenCV
+- **Control de Perspectiva**: Ajusta la intensidad del efecto 3D de 0.0 (rotación 2D) a 1.0 (máximo efecto de profundidad)
+- **Calidad Configurable**: Selecciona entre 30-120 frames por rotación para controlar suavidad y tamaño del archivo
+- **Transformaciones Paramétricas**: Utiliza matrices de homografía que varían según el ángulo de rotación para simular cambios de perspectiva
+- **Sin Conocimientos Técnicos**: El usuario solo ajusta un parámetro de "fuerza de perspectiva" sin necesidad de entender homografías
 
 ### 🎨 Características Comunes
 - **Eliminación de Fondo Mejorada**: Remueve automáticamente el fondo de las imágenes usando rembg con alpha matting para mejor precisión
@@ -28,6 +35,7 @@ Aplicación web Flask que genera videos profesionales con dos modos principales:
 
 - **Flask**: Framework web de Python
 - **MoviePy**: Edición y procesamiento de video
+- **OpenCV**: Transformaciones de perspectiva para efecto 3D
 - **rembg**: Eliminación automática de fondos de imágenes
 - **Pillow (PIL)**: Procesamiento y manipulación de imágenes
 - **HTML/CSS/JavaScript**: Interfaz de usuario moderna
@@ -136,7 +144,26 @@ El servidor se iniciará en `http://localhost:5000`
 
 6. **Haz clic en "Generar Video Animado"**
 
-#### Para ambos modos:
+#### 🌀 Modo Efecto 3D Spin
+
+3. **Sube los archivos requeridos**:
+   - **Imagen del Producto** (obligatorio): Una imagen del producto (PNG, JPG, o JPEG)
+   - **Fondo Personalizado** (opcional): Una imagen para usar como fondo (PNG, JPG, o JPEG)
+
+4. **Configura los parámetros del efecto 3D**:
+   - **Frames por Rotación**: Selecciona entre 30-120 frames
+     - 30-45 frames: Rápido, archivo pequeño
+     - 60 frames: Balance suavidad/tamaño (Recomendado)
+     - 90-120 frames: Muy suave, archivo más grande
+   - **Fuerza de Perspectiva**: Ajusta la intensidad del efecto 3D (0.0-1.0)
+     - 0.0: Sin perspectiva, rotación 2D simple
+     - 0.3: Moderado, efecto 3D sutil (Recomendado)
+     - 0.5-0.7: Fuerte, efecto 3D pronunciado
+     - 1.0: Máximo, efecto 3D extremo
+
+5. **Haz clic en "Generar Video 3D"**
+
+#### Para todos los modos:
 
 7. **Espera** mientras se procesa el video (esto puede tomar varios minutos)
 
@@ -208,6 +235,27 @@ La aplicación ofrece tres tipos de transiciones que los usuarios pueden selecci
 3. **Cinta de Película** (`create_filmstrip_transition_clip`): Efecto vintage con bordes y perforaciones de película
 
 Puedes personalizar cada efecto modificando las funciones correspondientes en `app.py`.
+
+### Efecto 3D Spin
+
+El efecto 3D se logra mediante transformaciones de perspectiva usando OpenCV:
+
+1. **Rotación 2D**: Cada frame comienza con una rotación 2D del producto
+2. **Transformación de Perspectiva**: Se aplica una matriz de homografía que varía según el ángulo:
+   - En ángulos 0° y 180° (vista frontal/trasera): Mínima distorsión
+   - En ángulos 90° y 270° (vista lateral): Máxima distorsión de perspectiva
+3. **Escalado Horizontal**: El producto se estrecha cuando se ve desde el lado
+4. **Inclinación Paramétrica**: Se aplica una inclinación que simula la proyección 3D
+
+Puedes ajustar los parámetros en la función `calculate_perspective_transform()` en `app.py`:
+
+```python
+# Controla la fuerza del escalado horizontal
+h_scale = 1.0 - (abs(sin_angle) * perspective_strength * 0.7)
+
+# Controla la inclinación de la perspectiva
+tilt_factor = sin_angle * perspective_strength * 0.3
+```
 
 ### Mejoras en la Eliminación de Fondo
 
@@ -307,6 +355,8 @@ Si encuentras errores de memoria, considera:
 - Las imágenes procesadas se eliminan automáticamente después de generar el video
 - El efecto de carrusel usa interpolación suave (ease-in-out)
 - La eliminación de fondo preserva el canal alfa para transparencia
+- El efecto 3D usa transformaciones de perspectiva de OpenCV con matrices de homografía
+- Los frames 3D se generan individualmente y se ensamblan con MoviePy
 
 ## 🤝 Contribuciones
 
@@ -329,6 +379,7 @@ Desarrollado como parte del proyecto videogenerator.
 ## 🙏 Agradecimientos
 
 - [MoviePy](https://zulko.github.io/moviepy/) - Edición de video en Python
+- [OpenCV](https://opencv.org/) - Transformaciones de perspectiva y procesamiento de imágenes
 - [rembg](https://github.com/danielgatis/rembg) - Eliminación de fondos con IA
 - [Flask](https://flask.palletsprojects.com/) - Framework web de Python
 - [Pillow](https://python-pillow.org/) - Procesamiento de imágenes
