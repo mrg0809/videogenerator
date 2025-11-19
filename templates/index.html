@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Generador de Videos con Carrusel</title>
+    <title>Generador de Videos - Carrusel y Animación de Productos</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>🎬 Generador de Videos con Carrusel</h1>
-            <p class="subtitle">Crea videos profesionales con intro, carrusel de productos y fondos personalizados</p>
+            <h1>🎬 Generador de Videos</h1>
+            <p class="subtitle">Crea videos profesionales con carrusel de productos o animaciones de producto único</p>
         </header>
 
         <!-- Flash Messages -->
@@ -26,9 +26,27 @@
             {% endif %}
         {% endwith %}
 
-        <!-- Upload Form -->
-        <div class="form-container">
-            <form method="POST" action="{{ url_for('generate_video_route') }}" enctype="multipart/form-data" id="uploadForm">
+        <!-- Tab Navigation -->
+        <div class="tab-container">
+            <div class="tab-buttons">
+                <button class="tab-button active" onclick="switchTab('carousel')">
+                    <span class="tab-icon">🎞️</span>
+                    Carrusel de Productos
+                </button>
+                <button class="tab-button" onclick="switchTab('product')">
+                    <span class="tab-icon">🔄</span>
+                    Animación de Producto
+                </button>
+            </div>
+        </div>
+
+        <!-- Carousel Form (Original Feature) -->
+        <div id="carousel-tab" class="tab-content active">
+            <div class="form-container">
+                <h2 class="form-title">📽️ Generador de Video con Carrusel</h2>
+                <p class="form-description">Crea un video combinando intro y múltiples productos con efectos de transición</p>
+                
+                <form method="POST" action="{{ url_for('generate_video_route') }}" enctype="multipart/form-data" id="uploadForm">
                 
                 <div class="form-group">
                     <label for="intro_video">
@@ -101,10 +119,82 @@
                 <div class="button-group">
                     <button type="submit" class="btn btn-primary" id="submitBtn">
                         <span class="btn-icon">✨</span>
-                        Generar Video
+                        Generar Video con Carrusel
                     </button>
                 </div>
             </form>
+            </div>
+        </div>
+
+        <!-- Product Animation Form (New Feature) -->
+        <div id="product-tab" class="tab-content">
+            <div class="form-container">
+                <h2 class="form-title">🎨 Generador de Video Animado de Producto</h2>
+                <p class="form-description">Crea un video animado de un solo producto con efectos de movimiento y rotación</p>
+                
+                <form method="POST" action="{{ url_for('generate_product_video_route') }}" enctype="multipart/form-data" id="productForm">
+                    
+                    <div class="form-group">
+                        <label for="product_image">
+                            <span class="label-icon">📸</span>
+                            Imagen del Producto (requerido)
+                        </label>
+                        <input type="file" 
+                               id="product_image" 
+                               name="product_image" 
+                               accept="image/png,image/jpeg,image/jpg" 
+                               required>
+                        <small>Formatos: PNG, JPG, JPEG | El fondo será removido automáticamente</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="product_background">
+                            <span class="label-icon">🎨</span>
+                            Fondo Personalizado (opcional)
+                        </label>
+                        <input type="file" 
+                               id="product_background" 
+                               name="product_background" 
+                               accept="image/png,image/jpeg,image/jpg">
+                        <small>Formatos: PNG, JPG, JPEG | Si no se proporciona, se usará un fondo blanco</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="animation_type">
+                            <span class="label-icon">🔄</span>
+                            Tipo de Animación
+                        </label>
+                        <select id="animation_type" name="animation_type" class="form-select">
+                            <option value="rotate">Rotación 360° (Una vuelta completa)</option>
+                            <option value="spin_zoom">Rotación + Zoom (Dos vueltas con acercamiento)</option>
+                            <option value="zoom">Zoom In/Out (Acercamiento y alejamiento)</option>
+                            <option value="float">Flotante (Movimiento suave arriba/abajo)</option>
+                        </select>
+                        <small>Selecciona el efecto de animación para tu producto</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="duration">
+                            <span class="label-icon">⏱️</span>
+                            Duración del Video (segundos)
+                        </label>
+                        <select id="duration" name="duration" class="form-select">
+                            <option value="3">3 segundos</option>
+                            <option value="5" selected>5 segundos</option>
+                            <option value="8">8 segundos</option>
+                            <option value="10">10 segundos</option>
+                        </select>
+                        <small>Duración total del video animado</small>
+                    </div>
+
+                    <div class="button-group">
+                        <button type="submit" class="btn btn-primary" id="productSubmitBtn">
+                            <span class="btn-icon">✨</span>
+                            Generar Video Animado
+                        </button>
+                    </div>
+                </form>
+            </div>
         </div>
 
         <!-- Video Download Section -->
@@ -128,19 +218,28 @@
         <!-- Instructions -->
         <div class="instructions">
             <h3>📋 Instrucciones</h3>
-            <ol>
-                <li><strong>Video de Introducción:</strong> Selecciona un video que se mostrará al inicio del video final.</li>
-                <li><strong>Imágenes de Productos:</strong> Selecciona entre 1 y 5 imágenes de productos. El fondo de cada imagen puede ser eliminado automáticamente si activas la opción.</li>
-                <li><strong>Fondo Personalizado:</strong> (Opcional) Sube una imagen que se usará como nuevo fondo para las imágenes de productos.</li>
-                <li><strong>Tipo de Transición:</strong> Elige entre tres efectos diferentes:
-                    <ul>
-                        <li><strong>Carrusel:</strong> Deslizamiento horizontal suave con escalado</li>
-                        <li><strong>Tarjetas:</strong> Efecto fade out/in con deslizamiento lateral</li>
-                        <li><strong>Cinta de Película:</strong> Estilo negativo vintage con scroll vertical</li>
-                    </ul>
-                </li>
-                <li><strong>Procesamiento:</strong> El proceso puede tomar varios minutos dependiendo del tamaño de los archivos.</li>
-            </ol>
+            
+            <div class="instructions-section">
+                <h4>🎞️ Carrusel de Productos:</h4>
+                <ol>
+                    <li><strong>Video de Introducción:</strong> Selecciona un video que se mostrará al inicio del video final.</li>
+                    <li><strong>Imágenes de Productos:</strong> Selecciona entre 1 y 5 imágenes de productos. El fondo puede ser eliminado automáticamente.</li>
+                    <li><strong>Fondo Personalizado:</strong> (Opcional) Sube una imagen que se usará como nuevo fondo.</li>
+                    <li><strong>Tipo de Transición:</strong> Elige entre Carrusel, Tarjetas o Cinta de Película.</li>
+                </ol>
+            </div>
+            
+            <div class="instructions-section">
+                <h4>🔄 Animación de Producto:</h4>
+                <ol>
+                    <li><strong>Imagen del Producto:</strong> Sube una imagen de tu producto (el fondo se eliminará automáticamente).</li>
+                    <li><strong>Fondo Personalizado:</strong> (Opcional) Sube una imagen de fondo personalizado.</li>
+                    <li><strong>Tipo de Animación:</strong> Elige entre rotación 360°, rotación con zoom, zoom in/out o efecto flotante.</li>
+                    <li><strong>Duración:</strong> Selecciona la duración del video (3, 5, 8 o 10 segundos).</li>
+                </ol>
+            </div>
+            
+            <p><strong>Nota:</strong> El procesamiento puede tomar varios minutos dependiendo del tamaño de los archivos.</p>
         </div>
 
         <!-- Features -->
@@ -149,28 +248,33 @@
             <div class="feature-grid">
                 <div class="feature-card">
                     <div class="feature-icon">🎬</div>
-                    <h4>Video de Intro</h4>
-                    <p>Añade un video de introducción profesional</p>
+                    <h4>Video con Intro</h4>
+                    <p>Crea videos combinando intro y carrusel de productos</p>
                 </div>
                 <div class="feature-card">
-                    <div class="feature-icon">🖼️</div>
-                    <h4>Carrusel de Productos</h4>
-                    <p>Muestra tus productos con efecto deslizante</p>
+                    <div class="feature-icon">🔄</div>
+                    <h4>Animación de Producto</h4>
+                    <p>Genera videos animados de productos individuales</p>
                 </div>
                 <div class="feature-card">
                     <div class="feature-icon">✂️</div>
                     <h4>Eliminación de Fondo</h4>
-                    <p>Remueve automáticamente el fondo de las imágenes con mejor precisión</p>
+                    <p>Remueve automáticamente el fondo con alta calidad usando IA</p>
                 </div>
                 <div class="feature-card">
                     <div class="feature-icon">🎨</div>
-                    <h4>Fondo Personalizado</h4>
-                    <p>Usa tu propia imagen de fondo</p>
+                    <h4>Fondos Personalizados</h4>
+                    <p>Usa tus propias imágenes como fondo</p>
                 </div>
                 <div class="feature-card">
                     <div class="feature-icon">🎞️</div>
-                    <h4>3 Tipos de Transición</h4>
-                    <p>Carrusel, Tarjetas o Cinta de Película</p>
+                    <h4>Múltiples Efectos</h4>
+                    <p>3 transiciones de carrusel + 4 animaciones de producto</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">⚡</div>
+                    <h4>Fácil de Usar</h4>
+                    <p>Interfaz intuitiva con resultados profesionales</p>
                 </div>
             </div>
         </div>
@@ -181,7 +285,31 @@
     </div>
 
     <script>
-        // Form validation
+        // Tab switching functionality
+        function switchTab(tabName) {
+            // Hide all tab contents
+            const tabContents = document.querySelectorAll('.tab-content');
+            tabContents.forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            // Remove active class from all buttons
+            const tabButtons = document.querySelectorAll('.tab-button');
+            tabButtons.forEach(button => {
+                button.classList.remove('active');
+            });
+            
+            // Show selected tab content
+            const selectedTab = document.getElementById(tabName + '-tab');
+            if (selectedTab) {
+                selectedTab.classList.add('active');
+            }
+            
+            // Add active class to clicked button
+            event.target.closest('.tab-button').classList.add('active');
+        }
+        
+        // Carousel form validation
         document.getElementById('uploadForm').addEventListener('submit', function(e) {
             const productImages = document.getElementById('product_images').files;
             
@@ -199,6 +327,23 @@
             
             // Show loading state
             const submitBtn = document.getElementById('submitBtn');
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="btn-icon">⏳</span> Procesando... Por favor espera';
+            submitBtn.classList.add('btn-loading');
+        });
+        
+        // Product animation form validation
+        document.getElementById('productForm').addEventListener('submit', function(e) {
+            const productImage = document.getElementById('product_image').files;
+            
+            if (productImage.length === 0) {
+                e.preventDefault();
+                alert('Por favor selecciona una imagen de producto.');
+                return false;
+            }
+            
+            // Show loading state
+            const submitBtn = document.getElementById('productSubmitBtn');
             submitBtn.disabled = true;
             submitBtn.innerHTML = '<span class="btn-icon">⏳</span> Procesando... Por favor espera';
             submitBtn.classList.add('btn-loading');

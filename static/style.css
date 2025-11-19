@@ -89,6 +89,73 @@ header h1 {
     border-left: 4px solid #cc6600;
 }
 
+/* Tab Navigation */
+.tab-container {
+    padding: 0 30px;
+    padding-top: 30px;
+}
+
+.tab-buttons {
+    display: flex;
+    gap: 10px;
+    border-bottom: 2px solid #e0e0e0;
+}
+
+.tab-button {
+    flex: 1;
+    padding: 15px 20px;
+    background: #f5f5f5;
+    border: none;
+    border-top-left-radius: 10px;
+    border-top-right-radius: 10px;
+    font-size: 1em;
+    font-weight: 600;
+    color: #666;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.tab-button:hover {
+    background: #e8e8e8;
+    color: #333;
+}
+
+.tab-button.active {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    transform: translateY(2px);
+}
+
+.tab-icon {
+    font-size: 1.3em;
+}
+
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+.form-title {
+    color: #667eea;
+    font-size: 1.5em;
+    margin-bottom: 10px;
+    text-align: center;
+}
+
+.form-description {
+    color: #666;
+    text-align: center;
+    margin-bottom: 30px;
+    font-size: 1em;
+}
+
 /* Form Container */
 .form-container {
     padding: 40px 30px;
@@ -336,6 +403,20 @@ header h1 {
     margin-bottom: 20px;
     display: flex;
     align-items: center;
+}
+
+.instructions-section {
+    margin-bottom: 25px;
+    padding: 20px;
+    background: white;
+    border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+.instructions-section h4 {
+    color: #667eea;
+    font-size: 1.3em;
+    margin-bottom: 15px;
 }
 
 .instructions ol {

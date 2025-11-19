@@ -433,6 +433,164 @@ def create_filmstrip_transition_clip(image_path, duration=3, video_size=(1920, 1
         raise
 
 
+def create_product_animation_clip(image_path, duration=5, video_size=(1920, 1080), animation_type='rotate'):
+    """
+    Create an animated video clip of a single product with rotation or movement.
+    
+    Args:
+        image_path: Path to the processed product image
+        duration: Duration of the animation in seconds
+        video_size: Size of the video (width, height)
+        animation_type: Type of animation ('rotate', 'zoom', 'float', 'spin_zoom')
+    
+    Returns:
+        VideoClip: The created animated video clip
+    """
+    try:
+        # Load image
+        img = Image.open(image_path)
+        img = img.resize(video_size, Image.Resampling.LANCZOS)
+        img_array = np.array(img)
+        
+        # Create ImageClip
+        clip = ImageClip(img_array, duration=duration)
+        
+        if animation_type == 'rotate':
+            # 360-degree rotation
+            def rotate_func(t):
+                angle = (t / duration) * 360
+                return angle
+            
+            clip = clip.rotate(rotate_func, center='center')
+            
+        elif animation_type == 'zoom':
+            # Zoom in and out effect
+            def resize_func(t):
+                progress = t / duration
+                # Smooth zoom in then zoom out
+                if progress < 0.5:
+                    scale = 0.8 + (0.4 * (progress / 0.5))
+                else:
+                    scale = 1.2 - (0.4 * ((progress - 0.5) / 0.5))
+                return scale
+            
+            clip = clip.resize(resize_func)
+            
+        elif animation_type == 'float':
+            # Floating up and down effect
+            def position_func(t):
+                progress = t / duration
+                # Smooth sine wave motion
+                y_offset = np.sin(progress * 4 * np.pi) * (video_size[1] * 0.1)
+                return ('center', 'center' if isinstance('center', str) else video_size[1]//2 + y_offset)
+            
+            def resize_func(t):
+                progress = t / duration
+                # Subtle scale with float
+                scale = 1.0 + (np.sin(progress * 4 * np.pi) * 0.1)
+                return scale
+            
+            clip = clip.set_position(lambda t: ('center', video_size[1]//2 + np.sin((t/duration) * 4 * np.pi) * (video_size[1] * 0.1)))
+            clip = clip.resize(resize_func)
+            
+        elif animation_type == 'spin_zoom':
+            # Combined rotation and zoom effect
+            def rotate_func(t):
+                angle = (t / duration) * 720  # Two full rotations
+                return angle
+            
+            def resize_func(t):
+                progress = t / duration
+                # Zoom in during first half, zoom out during second half
+                if progress < 0.5:
+                    scale = 0.7 + (0.6 * (progress / 0.5))
+                else:
+                    scale = 1.3 - (0.6 * ((progress - 0.5) / 0.5))
+                return scale
+            
+            clip = clip.rotate(rotate_func, center='center')
+            clip = clip.resize(resize_func)
+        
+        return clip
+    
+    except Exception as e:
+        print(f"Error creating product animation clip: {e}")
+        raise
+
+
+def generate_product_video(product_image_path, background_image_path, output_path, 
+                          duration=5, animation_type='rotate', video_size=(1920, 1080)):
+    """
+    Generate an animated video from a single product image.
+    
+    Args:
+        product_image_path: Path to the product image
+        background_image_path: Path to custom background image (can be None)
+        output_path: Path to save the output video
+        duration: Duration of the animation in seconds (default: 5)
+        animation_type: Type of animation ('rotate', 'zoom', 'float', 'spin_zoom')
+        video_size: Size of the video (width, height)
+    
+    Returns:
+        str: Path to the generated video
+    """
+    processed_image_path = None
+    
+    try:
+        # Create processed image path
+        processed_image_path = os.path.join(
+            UPLOAD_FOLDER, 
+            f"processed_{uuid.uuid4().hex}.jpg"
+        )
+        
+        # Remove background and composite
+        print("Removing background and compositing image...")
+        remove_background_and_composite(
+            product_image_path, 
+            background_image_path, 
+            processed_image_path,
+            video_size
+        )
+        
+        # Create animated clip
+        print(f"Creating animated video with {animation_type} effect...")
+        animated_clip = create_product_animation_clip(
+            processed_image_path, 
+            duration=duration, 
+            video_size=video_size,
+            animation_type=animation_type
+        )
+        
+        # Write final video
+        print("Rendering final video...")
+        animated_clip.write_videofile(
+            output_path,
+            codec='libx264',
+            audio_codec='aac',
+            fps=30,
+            preset='medium',
+            threads=4
+        )
+        
+        # Close clip to release resources
+        animated_clip.close()
+        
+        print("Product video generation complete!")
+        return output_path
+    
+    except Exception as e:
+        print(f"Error generating product video: {e}")
+        raise
+    
+    finally:
+        # Clean up processed image
+        if processed_image_path and os.path.exists(processed_image_path):
+            try:
+                os.remove(processed_image_path)
+            except Exception as e:
+                print(f"Warning: Could not delete processed image {processed_image_path}: {e}")
+
+
 def generate_video(intro_path, product_images, background_image_path, output_path, remove_bg=True, transition_type='carousel'):
     """
     Generate the final video with intro and product images using selected transition effect.
@@ -649,6 +807,94 @@ def generate_video_route():
     except Exception as e:
         print(f"Error en generate_video_route: {e}")
         flash(f'Error al generar el video: {str(e)}', 'error')
+        
+        # Clean up on error
+        for file_path in uploaded_files:
+            try:
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+            except:
+                pass
+        
+        return redirect(url_for('index'))
+
+
+@app.route('/generate_product_video', methods=['POST'])
+def generate_product_video_route():
+    """Handle single product animation video generation request."""
+    uploaded_files = []
+    
+    try:
+        # Check if product image is present
+        if 'product_image' not in request.files:
+            flash('No se encontró la imagen del producto', 'error')
+            return redirect(url_for('index'))
+        
+        product_image = request.files['product_image']
+        custom_background = request.files.get('product_background')
+        
+        # Get animation type and duration
+        animation_type = request.form.get('animation_type', 'rotate')
+        duration = int(request.form.get('duration', 5))
+        
+        # Validate product image
+        if product_image.filename == '':
+            flash('No se seleccionó una imagen de producto', 'error')
+            return redirect(url_for('index'))
+        
+        if not allowed_file(product_image.filename, 'image'):
+            flash('Formato de imagen no válido. Use PNG, JPG o JPEG', 'error')
+            return redirect(url_for('index'))
+        
+        # Save product image
+        print("Guardando imagen de producto...")
+        product_filename = f"{uuid.uuid4().hex}_{secure_filename(product_image.filename)}"
+        product_path = os.path.join(app.config['UPLOAD_FOLDER'], product_filename)
+        product_image.save(product_path)
+        uploaded_files.append(product_path)
+        
+        # Save custom background if provided
+        background_path = None
+        if custom_background and custom_background.filename != '':
+            if allowed_file(custom_background.filename, 'image'):
+                print("Guardando imagen de fondo personalizado...")
+                bg_filename = f"{uuid.uuid4().hex}_{secure_filename(custom_background.filename)}"
+                background_path = os.path.join(app.config['UPLOAD_FOLDER'], bg_filename)
+                custom_background.save(background_path)
+                uploaded_files.append(background_path)
+            else:
+                flash('Formato de imagen de fondo no válido', 'warning')
+        
+        # Generate output filename
+        output_filename = f"product_video_{uuid.uuid4().hex}.mp4"
+        output_path = os.path.join(app.config['VIDEOS_FOLDER'], output_filename)
+        
+        # Generate product video
+        print("Iniciando generación de video del producto...")
+        flash('Procesando video del producto... Esto puede tomar algunos minutos.', 'info')
+        generate_product_video(
+            product_path, 
+            background_path, 
+            output_path,
+            duration=duration,
+            animation_type=animation_type
+        )
+        
+        # Clean up uploaded files
+        print("Limpiando archivos temporales...")
+        for file_path in uploaded_files:
+            try:
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+            except Exception as e:
+                print(f"Warning: Could not delete file {file_path}: {e}")
+        
+        flash('¡Video del producto generado exitosamente!', 'success')
+        return render_template('index.html', video_filename=output_filename)
+    
+    except Exception as e:
+        print(f"Error en generate_product_video_route: {e}")
+        flash(f'Error al generar el video del producto: {str(e)}', 'error')
         
         # Clean up on error
         for file_path in uploaded_files:
