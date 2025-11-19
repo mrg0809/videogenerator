@@ -3,7 +3,7 @@ import uuid
 import io
 from flask import Flask, request, render_template, redirect, url_for, send_from_directory, flash
 from werkzeug.utils import secure_filename
-from moviepy.editor import VideoFileClip, ImageClip, CompositeVideoClip, concatenate_videoclips
+from moviepy.editor import VideoFileClip, ImageClip, CompositeVideoClip, concatenate_videoclips, ColorClip
 from PIL import Image, ImageDraw
 from rembg import remove
 import numpy as np
@@ -433,7 +433,7 @@ def create_filmstrip_transition_clip(image_path, duration=3, video_size=(1920, 1
         raise
 
 
-def create_product_animation_clip(image_path, duration=5, video_size=(1920, 1080), animation_type='rotate'):
+def create_product_animation_clip(image_path, duration=5, video_size=(1920, 1080), animation_type='rotate', bg_color=(255, 255, 255)):
     """
     Create an animated video clip of a single product with rotation or movement.
     
@@ -442,6 +442,7 @@ def create_product_animation_clip(image_path, duration=5, video_size=(1920, 1080
         duration: Duration of the animation in seconds
         video_size: Size of the video (width, height)
         animation_type: Type of animation ('rotate', 'zoom', 'float', 'spin_zoom')
+        bg_color: Background color as RGB tuple (default: white)
     
     Returns:
         VideoClip: The created animated video clip
@@ -461,7 +462,14 @@ def create_product_animation_clip(image_path, duration=5, video_size=(1920, 1080
                 angle = (t / duration) * 360
                 return angle
             
-            clip = clip.rotate(rotate_func)
+            # Create a background layer with the matching color
+            background_clip = ColorClip(size=video_size, color=bg_color, duration=duration)
+            
+            # Rotate the image clip
+            rotated_clip = clip.rotate(rotate_func, expand=True)
+            
+            # Composite the rotated clip on top of the background
+            clip = CompositeVideoClip([background_clip, rotated_clip.set_position('center')])
             
         elif animation_type == 'zoom':
             # Zoom in and out effect
@@ -508,8 +516,15 @@ def create_product_animation_clip(image_path, duration=5, video_size=(1920, 1080
                     scale = 1.3 - (0.6 * ((progress - 0.5) / 0.5))
                 return scale
             
-            clip = clip.rotate(rotate_func)
-            clip = clip.resize(resize_func)
+            # Create a background layer with the matching color
+            background_clip = ColorClip(size=video_size, color=bg_color, duration=duration)
+            
+            # Rotate and resize the image clip
+            rotated_clip = clip.rotate(rotate_func, expand=True)
+            resized_clip = rotated_clip.resize(resize_func)
+            
+            # Composite the rotated/resized clip on top of the background
+            clip = CompositeVideoClip([background_clip, resized_clip.set_position('center')])
         
         return clip
     
@@ -552,13 +567,21 @@ def generate_product_video(product_image_path, background_image_path, output_pat
             video_size
         )
         
+        # Determine background color for rotation effects
+        # Extract the corner pixel color as the background color
+        processed_img = Image.open(processed_image_path)
+        # Get color from top-left corner (should be background)
+        bg_color = processed_img.getpixel((0, 0))
+        processed_img.close()
+        
         # Create animated clip
         print(f"Creating animated video with {animation_type} effect...")
         animated_clip = create_product_animation_clip(
             processed_image_path, 
             duration=duration, 
             video_size=video_size,
-            animation_type=animation_type
+            animation_type=animation_type,
+            bg_color=bg_color
         )
         
         # Write final video
