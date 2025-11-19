@@ -7,6 +7,7 @@ from moviepy.editor import VideoFileClip, ImageClip, CompositeVideoClip, concate
 from PIL import Image, ImageDraw
 from rembg import remove
 import numpy as np
+import cv2
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev_secret_key_change_in_production')
@@ -713,6 +714,208 @@ def generate_product_video(product_image_path, background_image_path, output_pat
                 print(f"Warning: Could not delete processed image {processed_image_path}: {e}")
 
 
+def calculate_perspective_transform(width, height, angle_degrees, perspective_strength):
+    """
+    Calculate perspective transformation matrix for simulating 3D rotation.
+    
+    Args:
+        width: Image width
+        height: Image height
+        angle_degrees: Rotation angle in degrees (0-360)
+        perspective_strength: Strength of perspective effect (0.0-1.0)
+    
+    Returns:
+        tuple: (transform_matrix, new_width, new_height) for cv2.warpPerspective
+    """
+    # Normalize angle to 0-360
+    angle = angle_degrees % 360
+    
+    # Calculate perspective distortion based on angle
+    # Maximum distortion at 90° and 270° (side views)
+    # Minimum distortion at 0°, 180°, 360° (front/back views)
+    angle_rad = np.radians(angle)
+    
+    # Use sine to create smooth perspective transition
+    # At 0° and 180°, cos is ±1 (front view, no perspective)
+    # At 90° and 270°, cos is 0 (side view, maximum perspective)
+    cos_angle = np.cos(angle_rad)
+    sin_angle = np.sin(angle_rad)
+    
+    # Calculate horizontal scale factor based on angle
+    # Objects appear narrower when viewed from the side
+    h_scale = 1.0 - (abs(sin_angle) * perspective_strength * 0.7)
+    
+    # Calculate perspective tilt
+    # Positive angles tilt right, negative tilt left
+    tilt_factor = sin_angle * perspective_strength * 0.3
+    
+    # Define source points (original image corners)
+    src_pts = np.float32([
+        [0, 0],              # Top-left
+        [width, 0],          # Top-right
+        [width, height],     # Bottom-right
+        [0, height]          # Bottom-left
+    ])
+    
+    # Calculate new dimensions with padding for rotation
+    new_width = int(width * 1.5)
+    new_height = int(height * 1.2)
+    
+    # Center offset
+    x_offset = (new_width - width) / 2
+    y_offset = (new_height - height) / 2
+    
+    # Calculate destination points with perspective distortion
+    # Apply horizontal scaling and perspective tilt
+    dst_pts = np.float32([
+        [x_offset + width * (1 - h_scale) / 2 + height * tilt_factor * 0.1,
+         y_offset],
+        [x_offset + width - width * (1 - h_scale) / 2 + height * tilt_factor * 0.1,
+         y_offset],
+        [x_offset + width - width * (1 - h_scale) / 2 - height * tilt_factor * 0.1,
+         y_offset + height],
+        [x_offset + width * (1 - h_scale) / 2 - height * tilt_factor * 0.1,
+         y_offset + height]
+    ])
+    
+    # Get perspective transform matrix
+    matrix = cv2.getPerspectiveTransform(src_pts, dst_pts)
+    
+    return matrix, new_width, new_height
+
+
+def generate_3d_spin_video(image_path, output_path, frames_per_rotation=60, 
+                          perspective_strength=0.3, duration=None, 
+                          video_size=(1920, 1080), bg_color=(255, 255, 255)):
+    """
+    Generate a 3D-like spin/rotation video from a product image using perspective transformations.
+    
+    Args:
+        image_path: Path to the product image (should have transparent background)
+        output_path: Path to save the output video
+        frames_per_rotation: Number of frames for complete 360° rotation (default: 60)
+        perspective_strength: Strength of perspective effect, 0.0-1.0 (default: 0.3)
+        duration: Duration of video in seconds (default: calculated from frames_per_rotation)
+        video_size: Output video size (width, height)
+        bg_color: Background color as RGB tuple
+    
+    Returns:
+        str: Path to the generated video
+    """
+    try:
+        print(f"Starting 3D spin video generation...")
+        print(f"Parameters: {frames_per_rotation} frames, perspective strength: {perspective_strength}")
+        
+        # Load image with transparency
+        img = Image.open(image_path)
+        if img.mode != 'RGBA':
+            img = img.convert('RGBA')
+        
+        # Convert PIL to OpenCV format (BGRA)
+        img_array = np.array(img)
+        img_bgra = cv2.cvtColor(img_array, cv2.COLOR_RGBA2BGRA)
+        
+        # Get image dimensions
+        height, width = img_bgra.shape[:2]
+        
+        # Calculate video duration (default: 30 fps)
+        fps = 30
+        if duration is None:
+            duration = frames_per_rotation / fps
+        
+        # Clamp perspective strength to valid range
+        perspective_strength = max(0.0, min(1.0, perspective_strength))
+        
+        # Generate frames with perspective transformation
+        frames = []
+        print(f"Generating {frames_per_rotation} frames...")
+        
+        for i in range(frames_per_rotation):
+            # Calculate rotation angle
+            angle = (i / frames_per_rotation) * 360
+            
+            # First rotate the image in 2D
+            rotation_matrix = cv2.getRotationMatrix2D((width / 2, height / 2), angle, 1.0)
+            rotated = cv2.warpAffine(img_bgra, rotation_matrix, (width, height), 
+                                    flags=cv2.INTER_LINEAR,
+                                    borderMode=cv2.BORDER_CONSTANT,
+                                    borderValue=(0, 0, 0, 0))
+            
+            # Apply perspective transformation
+            perspective_matrix, new_width, new_height = calculate_perspective_transform(
+                width, height, angle, perspective_strength
+            )
+            
+            # Warp with perspective
+            warped = cv2.warpPerspective(rotated, perspective_matrix, 
+                                        (new_width, new_height),
+                                        flags=cv2.INTER_LINEAR,
+                                        borderMode=cv2.BORDER_CONSTANT,
+                                        borderValue=(0, 0, 0, 0))
+            
+            # Create canvas with background color
+            canvas = np.zeros((video_size[1], video_size[0], 4), dtype=np.uint8)
+            canvas[:, :, 0:3] = bg_color[::-1]  # BGR format
+            canvas[:, :, 3] = 255  # Full opacity for background
+            
+            # Calculate position to center the warped image
+            y_offset = (video_size[1] - new_height) // 2
+            x_offset = (video_size[0] - new_width) // 2
+            
+            # Ensure warped image fits in canvas
+            if y_offset >= 0 and x_offset >= 0:
+                y_end = min(y_offset + new_height, video_size[1])
+                x_end = min(x_offset + new_width, video_size[0])
+                
+                warped_h = y_end - y_offset
+                warped_w = x_end - x_offset
+                
+                # Composite warped image onto canvas with alpha blending
+                alpha = warped[:warped_h, :warped_w, 3:4] / 255.0
+                canvas[y_offset:y_end, x_offset:x_end, 0:3] = (
+                    canvas[y_offset:y_end, x_offset:x_end, 0:3] * (1 - alpha) +
+                    warped[:warped_h, :warped_w, 0:3] * alpha
+                ).astype(np.uint8)
+            
+            # Convert BGRA to RGB for MoviePy
+            frame_rgb = cv2.cvtColor(canvas, cv2.COLOR_BGRA2RGB)
+            frames.append(frame_rgb)
+            
+            if (i + 1) % 10 == 0:
+                print(f"  Generated {i + 1}/{frames_per_rotation} frames...")
+        
+        print(f"All frames generated. Creating video...")
+        
+        # Create video from frames using MoviePy
+        from moviepy.editor import ImageSequenceClip
+        
+        video_clip = ImageSequenceClip(frames, fps=fps)
+        video_clip = video_clip.set_duration(duration)
+        
+        # Write video file
+        print("Rendering final video...")
+        video_clip.write_videofile(
+            output_path,
+            codec='libx264',
+            audio=False,
+            fps=fps,
+            preset='medium',
+            threads=4
+        )
+        
+        # Clean up
+        video_clip.close()
+        
+        print("3D spin video generation complete!")
+        return output_path
+    
+    except Exception as e:
+        print(f"Error generating 3D spin video: {e}")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
+        raise
+
+
 def generate_video(intro_path, product_images, background_image_path, output_path, remove_bg=True, transition_type='carousel'):
     """
     Generate the final video with intro and product images using selected transition effect.
@@ -1017,6 +1220,127 @@ def generate_product_video_route():
     except Exception as e:
         print(f"Error en generate_product_video_route: {e}")
         flash(f'Error al generar el video del producto: {str(e)}', 'error')
+        
+        # Clean up on error
+        for file_path in uploaded_files:
+            try:
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+            except:
+                pass
+        
+        return redirect(url_for('index'))
+
+
+@app.route('/generate_3d_spin', methods=['POST'])
+def generate_3d_spin_route():
+    """Handle 3D spin video generation request."""
+    uploaded_files = []
+    
+    try:
+        # Check if product image is present
+        if 'spin_product_image' not in request.files:
+            flash('No se encontró la imagen del producto', 'error')
+            return redirect(url_for('index'))
+        
+        product_image = request.files['spin_product_image']
+        custom_background = request.files.get('spin_background')
+        
+        # Get parameters
+        frames_per_rotation = int(request.form.get('frames_per_rotation', 60))
+        perspective_strength = float(request.form.get('perspective_strength', 0.3))
+        
+        # Validate product image
+        if product_image.filename == '':
+            flash('No se seleccionó una imagen de producto', 'error')
+            return redirect(url_for('index'))
+        
+        if not allowed_file(product_image.filename, 'image'):
+            flash('Formato de imagen no válido. Use PNG, JPG o JPEG', 'error')
+            return redirect(url_for('index'))
+        
+        # Validate parameters
+        if not (30 <= frames_per_rotation <= 120):
+            flash('El número de frames debe estar entre 30 y 120', 'error')
+            return redirect(url_for('index'))
+        
+        if not (0.0 <= perspective_strength <= 1.0):
+            flash('La fuerza de perspectiva debe estar entre 0.0 y 1.0', 'error')
+            return redirect(url_for('index'))
+        
+        # Save product image
+        print("Guardando imagen de producto...")
+        product_filename = f"{uuid.uuid4().hex}_{secure_filename(product_image.filename)}"
+        product_path = os.path.join(app.config['UPLOAD_FOLDER'], product_filename)
+        product_image.save(product_path)
+        uploaded_files.append(product_path)
+        
+        # Determine background color
+        bg_color = (255, 255, 255)  # Default white
+        if custom_background and custom_background.filename != '':
+            if allowed_file(custom_background.filename, 'image'):
+                print("Guardando imagen de fondo personalizado...")
+                bg_filename = f"{uuid.uuid4().hex}_{secure_filename(custom_background.filename)}"
+                background_path = os.path.join(app.config['UPLOAD_FOLDER'], bg_filename)
+                custom_background.save(background_path)
+                uploaded_files.append(background_path)
+                
+                # Get average color from custom background
+                bg_img = Image.open(background_path)
+                bg_img_resized = bg_img.resize((100, 100))
+                bg_array = np.array(bg_img_resized)
+                bg_color = tuple(bg_array.mean(axis=(0, 1)).astype(int).tolist()[:3])
+                bg_img.close()
+            else:
+                flash('Formato de imagen de fondo no válido', 'warning')
+        
+        # Process image - remove background
+        print("Removiendo fondo de la imagen...")
+        processed_image_path = os.path.join(
+            app.config['UPLOAD_FOLDER'], 
+            f"processed_{uuid.uuid4().hex}.png"
+        )
+        
+        # Remove background and keep transparency
+        remove_background_only(
+            product_path,
+            processed_image_path,
+            target_size=(1920, 1080)
+        )
+        uploaded_files.append(processed_image_path)
+        
+        # Generate output filename
+        output_filename = f"3d_spin_{uuid.uuid4().hex}.mp4"
+        output_path = os.path.join(app.config['VIDEOS_FOLDER'], output_filename)
+        
+        # Generate 3D spin video
+        print("Iniciando generación de video 3D...")
+        flash('Procesando video 3D... Esto puede tomar algunos minutos.', 'info')
+        generate_3d_spin_video(
+            processed_image_path,
+            output_path,
+            frames_per_rotation=frames_per_rotation,
+            perspective_strength=perspective_strength,
+            bg_color=bg_color
+        )
+        
+        # Clean up uploaded files
+        print("Limpiando archivos temporales...")
+        for file_path in uploaded_files:
+            try:
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+            except Exception as e:
+                print(f"Warning: Could not delete file {file_path}: {e}")
+        
+        flash('¡Video 3D generado exitosamente!', 'success')
+        return render_template('index.html', video_filename=output_filename)
+    
+    except Exception as e:
+        print(f"Error en generate_3d_spin_route: {e}")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
+        flash(f'Error al generar el video 3D: {str(e)}', 'error')
         
         # Clean up on error
         for file_path in uploaded_files:

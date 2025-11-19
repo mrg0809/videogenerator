@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Generador de Videos - Carrusel y Animación de Productos</title>
+    <title>Generador de Videos - Carrusel, Animación y Efecto 3D</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
     <div class="container">
         <header>
             <h1>🎬 Generador de Videos</h1>
-            <p class="subtitle">Crea videos profesionales con carrusel de productos o animaciones de producto único</p>
+            <p class="subtitle">Crea videos profesionales con carrusel de productos, animaciones o efectos 3D de rotación</p>
         </header>
 
         <!-- Flash Messages -->
@@ -36,6 +36,10 @@
                 <button class="tab-button" onclick="switchTab('product')">
                     <span class="tab-icon">🔄</span>
                     Animación de Producto
+                </button>
+                <button class="tab-button" onclick="switchTab('spin3d')">
+                    <span class="tab-icon">🌀</span>
+                    Efecto 3D Spin
                 </button>
             </div>
         </div>
@@ -197,6 +201,83 @@
             </div>
         </div>
 
+        <!-- 3D Spin Form (New Feature) -->
+        <div id="spin3d-tab" class="tab-content">
+            <div class="form-container">
+                <h2 class="form-title">🌀 Generador de Video 3D Spin</h2>
+                <p class="form-description">Crea un video con rotación 3D de producto usando transformaciones de perspectiva</p>
+                
+                <form method="POST" action="{{ url_for('generate_3d_spin_route') }}" enctype="multipart/form-data" id="spin3dForm">
+                    <div class="form-group">
+                        <label for="spin_product_image" class="form-label">
+                            <span class="label-icon">📸</span>
+                            Imagen del Producto *
+                        </label>
+                        <input type="file" 
+                               id="spin_product_image" 
+                               name="spin_product_image" 
+                               accept=".png,.jpg,.jpeg" 
+                               class="form-input" 
+                               required>
+                        <small>Formatos: PNG, JPG, JPEG. El fondo será removido automáticamente.</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="spin_background" class="form-label">
+                            <span class="label-icon">🖼️</span>
+                            Fondo Personalizado (Opcional)
+                        </label>
+                        <input type="file" 
+                               id="spin_background" 
+                               name="spin_background" 
+                               accept=".png,.jpg,.jpeg" 
+                               class="form-input">
+                        <small>Si no se proporciona, se usará fondo blanco</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="frames_per_rotation" class="form-label">
+                            <span class="label-icon">🎞️</span>
+                            Frames por Rotación
+                        </label>
+                        <select id="frames_per_rotation" name="frames_per_rotation" class="form-select">
+                            <option value="30">30 frames (rápido)</option>
+                            <option value="45">45 frames (normal)</option>
+                            <option value="60" selected>60 frames (suave)</option>
+                            <option value="90">90 frames (muy suave)</option>
+                            <option value="120">120 frames (ultra suave)</option>
+                        </select>
+                        <small>Más frames = rotación más suave pero archivo más grande</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="perspective_strength" class="form-label">
+                            <span class="label-icon">🎨</span>
+                            Fuerza de Perspectiva
+                        </label>
+                        <select id="perspective_strength" name="perspective_strength" class="form-select">
+                            <option value="0.0">0.0 - Sin perspectiva (2D)</option>
+                            <option value="0.1">0.1 - Muy sutil</option>
+                            <option value="0.2">0.2 - Sutil</option>
+                            <option value="0.3" selected>0.3 - Moderado (Recomendado)</option>
+                            <option value="0.4">0.4 - Fuerte</option>
+                            <option value="0.5">0.5 - Muy fuerte</option>
+                            <option value="0.7">0.7 - Extremo</option>
+                            <option value="1.0">1.0 - Máximo</option>
+                        </select>
+                        <small>Controla qué tan pronunciado es el efecto 3D. 0.0 = rotación 2D simple, 1.0 = máximo efecto de profundidad</small>
+                    </div>
+
+                    <div class="button-group">
+                        <button type="submit" class="btn btn-primary" id="spin3dSubmitBtn">
+                            <span class="btn-icon">🌀</span>
+                            Generar Video 3D
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
         <!-- Video Download Section -->
         {% if video_filename %}
         <div class="download-container">
@@ -238,6 +319,17 @@
                     <li><strong>Duración:</strong> Selecciona la duración del video (3, 5, 8 o 10 segundos).</li>
                 </ol>
             </div>
+
+            <div class="instructions-section">
+                <h4>🌀 Efecto 3D Spin:</h4>
+                <ol>
+                    <li><strong>Imagen del Producto:</strong> Sube una imagen de tu producto (el fondo se eliminará automáticamente).</li>
+                    <li><strong>Fondo Personalizado:</strong> (Opcional) Sube una imagen de fondo. Si no, se usará blanco.</li>
+                    <li><strong>Frames por Rotación:</strong> Selecciona cuántos frames usar para la rotación completa (30-120). Más frames = más suave.</li>
+                    <li><strong>Fuerza de Perspectiva:</strong> Controla la intensidad del efecto 3D (0.0-1.0). 0.3 es el valor recomendado.</li>
+                    <li>El sistema genera automáticamente un video con rotación 360° simulando perspectiva 3D.</li>
+                </ol>
+            </div>
             
             <p><strong>Nota:</strong> El procesamiento puede tomar varios minutos dependiendo del tamaño de los archivos.</p>
         </div>
@@ -257,6 +349,11 @@
                     <p>Genera videos animados de productos individuales</p>
                 </div>
                 <div class="feature-card">
+                    <div class="feature-icon">🌀</div>
+                    <h4>Efecto 3D Spin</h4>
+                    <p>Rotación 360° con perspectiva 3D realista usando OpenCV</p>
+                </div>
+                <div class="feature-card">
                     <div class="feature-icon">✂️</div>
                     <h4>Eliminación de Fondo</h4>
                     <p>Remueve automáticamente el fondo con alta calidad usando IA</p>
@@ -269,7 +366,7 @@
                 <div class="feature-card">
                     <div class="feature-icon">🎞️</div>
                     <h4>Múltiples Efectos</h4>
-                    <p>3 transiciones de carrusel + 4 animaciones de producto</p>
+                    <p>3 transiciones de carrusel + 4 animaciones + efecto 3D</p>
                 </div>
                 <div class="feature-card">
                     <div class="feature-icon">⚡</div>
@@ -344,6 +441,23 @@
             
             // Show loading state
             const submitBtn = document.getElementById('productSubmitBtn');
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="btn-icon">⏳</span> Procesando... Por favor espera';
+            submitBtn.classList.add('btn-loading');
+        });
+
+        // 3D Spin form validation
+        document.getElementById('spin3dForm').addEventListener('submit', function(e) {
+            const productImage = document.getElementById('spin_product_image').files;
+            
+            if (productImage.length === 0) {
+                e.preventDefault();
+                alert('Por favor selecciona una imagen de producto.');
+                return false;
+            }
+            
+            // Show loading state
+            const submitBtn = document.getElementById('spin3dSubmitBtn');
             submitBtn.disabled = true;
             submitBtn.innerHTML = '<span class="btn-icon">⏳</span> Procesando... Por favor espera';
             submitBtn.classList.add('btn-loading');
