@@ -853,6 +853,20 @@ def generate_3d_spin_video(image_path, output_path, frames_per_rotation=60,
                                         borderMode=cv2.BORDER_CONSTANT,
                                         borderValue=(0, 0, 0, 0))
             
+            # Apply visibility fade for back side (90-270 degrees)
+            # This makes it realistic - we can't see the back of a 2D image
+            visibility = 1.0
+            if 90 < angle < 270:
+                # Fade out when showing the "back" that we don't have
+                # Maximum fade at 180° (directly behind)
+                angle_from_back = abs(180 - angle)
+                visibility = angle_from_back / 90.0  # 0.0 at 180°, 1.0 at 90°/270°
+                visibility = max(0.1, min(1.0, visibility))  # Keep minimum 10% visibility
+            
+            # Apply visibility to alpha channel
+            if visibility < 1.0:
+                warped[:, :, 3] = (warped[:, :, 3] * visibility).astype(np.uint8)
+            
             # Create canvas with background color
             canvas = np.zeros((video_size[1], video_size[0], 4), dtype=np.uint8)
             canvas[:, :, 0:3] = bg_color[::-1]  # BGR format
