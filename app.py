@@ -784,6 +784,84 @@ def calculate_perspective_transform(width, height, angle_degrees, perspective_st
     return matrix, new_width, new_height
 
 
+def calculate_smooth_orbital_perspective(width, height, camera_angle_degrees, perspective_strength):
+    """
+    Calculate smooth perspective transformation for orbital camera effect.
+    Uses progressive transformations for fluid motion.
+    
+    Args:
+        width: Image width
+        height: Image height
+        camera_angle_degrees: Camera position angle in degrees (0-360)
+        perspective_strength: Strength of perspective effect (0.0-1.0)
+    
+    Returns:
+        tuple: (transform_matrix, new_width, new_height) for cv2.warpPerspective
+    """
+    # Normalize angle to 0-360
+    angle = camera_angle_degrees % 360
+    angle_rad = np.radians(angle)
+    
+    # Use smooth sinusoidal functions for natural motion
+    cos_angle = np.cos(angle_rad)
+    sin_angle = np.sin(angle_rad)
+    
+    # Smoother horizontal scale variation (less aggressive)
+    # Use squared sine for smoother transitions
+    h_scale_factor = (sin_angle ** 2) * perspective_strength * 0.35
+    h_scale = 1.0 - h_scale_factor
+    
+    # Very subtle vertical scaling for depth
+    v_scale = 1.0 - (abs(sin_angle) * perspective_strength * 0.08)
+    
+    # Smooth perspective tilt (3D rotation effect)
+    tilt_x = sin_angle * perspective_strength * 0.12
+    tilt_y = cos_angle * perspective_strength * 0.04
+    
+    # Define source points (original image corners)
+    src_pts = np.float32([
+        [0, 0],              # Top-left
+        [width, 0],          # Top-right
+        [width, height],     # Bottom-right
+        [0, height]          # Bottom-left
+    ])
+    
+    # Calculate new dimensions with minimal padding
+    new_width = int(width * 1.2)
+    new_height = int(height * 1.1)
+    
+    # Center offset
+    x_offset = (new_width - width) / 2
+    y_offset = (new_height - height) / 2
+    
+    # Calculate scaled dimensions
+    scaled_width = width * h_scale
+    scaled_height = height * v_scale
+    width_margin = (width - scaled_width) / 2
+    height_margin = (height - scaled_height) / 2
+    
+    # Calculate destination points with smooth perspective
+    dst_pts = np.float32([
+        # Top-left - apply tilt
+        [x_offset + width_margin + height * tilt_x * 0.5,
+         y_offset + height_margin + width * tilt_y * 0.3],
+        # Top-right - apply tilt
+        [x_offset + width - width_margin + height * tilt_x * 0.5,
+         y_offset + height_margin - width * tilt_y * 0.3],
+        # Bottom-right - apply tilt
+        [x_offset + width - width_margin - height * tilt_x * 0.5,
+         y_offset + height - height_margin - width * tilt_y * 0.3],
+        # Bottom-left - apply tilt
+        [x_offset + width_margin - height * tilt_x * 0.5,
+         y_offset + height - height_margin + width * tilt_y * 0.3]
+    ])
+    
+    # Get perspective transform matrix
+    matrix = cv2.getPerspectiveTransform(src_pts, dst_pts)
+    
+    return matrix, new_width, new_height
+
+
 def calculate_orbital_perspective_transform(width, height, camera_angle_degrees, perspective_strength):
     """
     Calculate perspective transformation for orbital camera effect.
@@ -918,36 +996,50 @@ def generate_multi_image_3d_spin_video(image_paths_dict, output_path, frames_per
             # Calculate camera angle (orbital rotation around product)
             camera_angle = (i / frames_per_rotation) * 360
             
-            # Select appropriate image based on camera angle
-            current_img, blend_factor = select_image_for_angle(images, camera_angle)
+            # Get primary and secondary images for smooth blending
+            current_img, next_img, blend_weight = select_image_for_angle_smooth(images, camera_angle)
             
-            # Apply only subtle horizontal rotation to product (turntable effect)
-            # Product rotates slowly on its vertical axis as camera orbits
-            product_rotation = camera_angle * 0.1  # Much less rotation than camera angle
+            # Product rotates in sync with camera (full 360° rotation)
+            # This creates natural turntable effect
+            product_rotation = camera_angle
             
-            # Rotate product slightly on vertical axis only
+            # Rotate product on vertical axis with high-quality interpolation
             rotation_matrix = cv2.getRotationMatrix2D((width / 2, height / 2), product_rotation, 1.0)
             rotated = cv2.warpAffine(current_img, rotation_matrix, (width, height),
-                                    flags=cv2.INTER_LINEAR,
+                                    flags=cv2.INTER_CUBIC,  # Higher quality interpolation
                                     borderMode=cv2.BORDER_CONSTANT,
                                     borderValue=(0, 0, 0, 0))
             
-            # Apply orbital camera perspective transformation
-            # This simulates the camera moving around the product
-            perspective_matrix, new_width, new_height = calculate_orbital_perspective_transform(
+            # If blending between views, also rotate next image
+            if next_img is not None and blend_weight > 0:
+                rotated_next = cv2.warpAffine(next_img, rotation_matrix, (width, height),
+                                            flags=cv2.INTER_CUBIC,
+                                            borderMode=cv2.BORDER_CONSTANT,
+                                            borderValue=(0, 0, 0, 0))
+                # Blend between current and next image
+                alpha_curr = rotated[:, :, 3:4].astype(float) / 255.0 * (1.0 - blend_weight)
+                alpha_next = rotated_next[:, :, 3:4].astype(float) / 255.0 * blend_weight
+                alpha_total = alpha_curr + alpha_next
+                alpha_total = np.maximum(alpha_total, 1e-5)  # Avoid division by zero
+                
+                # Blend RGB channels
+                blended_rgb = (rotated[:, :, 0:3].astype(float) * alpha_curr +
+                              rotated_next[:, :, 0:3].astype(float) * alpha_next) / alpha_total
+                blended_alpha = (alpha_total * 255.0).clip(0, 255)
+                
+                rotated = np.dstack([blended_rgb, blended_alpha]).astype(np.uint8)
+            
+            # Apply smoother orbital camera perspective transformation
+            perspective_matrix, new_width, new_height = calculate_smooth_orbital_perspective(
                 width, height, camera_angle, perspective_strength
             )
             
-            # Warp with perspective to simulate camera orbit
+            # Warp with perspective using high-quality interpolation
             warped = cv2.warpPerspective(rotated, perspective_matrix,
                                         (new_width, new_height),
-                                        flags=cv2.INTER_LINEAR,
+                                        flags=cv2.INTER_CUBIC,  # Higher quality
                                         borderMode=cv2.BORDER_CONSTANT,
                                         borderValue=(0, 0, 0, 0))
-            
-            # Apply blend factor if transitioning between images
-            if blend_factor < 1.0:
-                warped[:, :, 3] = (warped[:, :, 3] * blend_factor).astype(np.uint8)
             
             # Create canvas with background color
             canvas = np.zeros((video_size[1], video_size[0], 4), dtype=np.uint8)
@@ -1022,6 +1114,76 @@ def generate_multi_image_3d_spin_video(image_paths_dict, output_path, frames_per
         import traceback
         print(f"Traceback: {traceback.format_exc()}")
         raise
+
+
+def select_image_for_angle_smooth(images, angle):
+    """
+    Select images for smooth blending based on rotation angle.
+    Returns two images and a blend weight for seamless transitions.
+    
+    Args:
+        images: Dictionary with keys 'front', 'back', 'left', 'right'
+        angle: Current rotation angle (0-360)
+    
+    Returns:
+        tuple: (current_image, next_image, blend_weight)
+               blend_weight: 0.0 = use current only, 1.0 = use next only
+    """
+    # Normalize angle to 0-360
+    angle = angle % 360
+    
+    # Define view centers
+    view_angles = {
+        'front': 0,
+        'right': 90,
+        'back': 180,
+        'left': 270
+    }
+    
+    # Find which two views we're between
+    # Transition zone: 20° before and after each view center
+    transition_range = 20
+    
+    # Check each view
+    for view_name, view_angle in view_angles.items():
+        if view_name not in images:
+            continue
+            
+        # Calculate angular distance (handling wraparound at 0/360)
+        dist = abs(angle - view_angle)
+        if dist > 180:
+            dist = 360 - dist
+            
+        # If we're close to this view center
+        if dist <= transition_range:
+            # Determine next view for blending
+            next_view = None
+            if angle > view_angle or (view_angle == 0 and angle > 340):
+                # Moving clockwise
+                next_view_name = {
+                    'front': 'right',
+                    'right': 'back',
+                    'back': 'left',
+                    'left': 'front'
+                }.get(view_name)
+                next_view = images.get(next_view_name)
+            elif angle < view_angle or (view_angle == 0 and angle < 20):
+                # Moving counter-clockwise
+                next_view_name = {
+                    'front': 'left',
+                    'left': 'back',
+                    'back': 'right',
+                    'right': 'front'
+                }.get(view_name)
+                next_view = images.get(next_view_name)
+            
+            # Calculate blend weight (0 at center, 1 at transition edge)
+            blend_weight = dist / transition_range if next_view is not None else 0.0
+            
+            return images[view_name], next_view, blend_weight
+    
+    # Default: use front view without blending
+    return images.get('front', images['front']), None, 0.0
 
 
 def select_image_for_angle(images, angle):
@@ -1156,36 +1318,35 @@ def generate_3d_spin_video(image_path, output_path, frames_per_rotation=60,
             # Calculate camera angle (orbital rotation)
             camera_angle = (i / frames_per_rotation) * 360
             
-            # Apply only subtle horizontal rotation to product (turntable effect)
-            # Product rotates slowly on its vertical axis
-            product_rotation = camera_angle * 0.1  # Much less rotation than camera
+            # Product rotates in sync with camera for smooth motion
+            product_rotation = camera_angle
             
-            # Rotate product slightly on vertical axis only
+            # Rotate product on vertical axis with high-quality interpolation
             rotation_matrix = cv2.getRotationMatrix2D((width / 2, height / 2), product_rotation, 1.0)
             rotated = cv2.warpAffine(img_bgra, rotation_matrix, (width, height), 
-                                    flags=cv2.INTER_LINEAR,
+                                    flags=cv2.INTER_CUBIC,  # Higher quality
                                     borderMode=cv2.BORDER_CONSTANT,
                                     borderValue=(0, 0, 0, 0))
             
-            # Apply orbital camera perspective transformation
-            perspective_matrix, new_width, new_height = calculate_orbital_perspective_transform(
+            # Apply smooth orbital camera perspective transformation
+            perspective_matrix, new_width, new_height = calculate_smooth_orbital_perspective(
                 width, height, camera_angle, perspective_strength
             )
             
-            # Warp with perspective to simulate camera orbit
+            # Warp with perspective using high-quality interpolation
             warped = cv2.warpPerspective(rotated, perspective_matrix, 
                                         (new_width, new_height),
-                                        flags=cv2.INTER_LINEAR,
+                                        flags=cv2.INTER_CUBIC,  # Higher quality
                                         borderMode=cv2.BORDER_CONSTANT,
                                         borderValue=(0, 0, 0, 0))
             
             # Apply visibility fade for back side (90-270 degrees)
             # This makes it realistic - we can't see the back of a 2D image
             visibility = 1.0
-            if 90 < angle < 270:
+            if 90 < camera_angle < 270:
                 # Fade out when showing the "back" that we don't have
                 # Maximum fade at 180° (directly behind)
-                angle_from_back = abs(180 - angle)
+                angle_from_back = abs(180 - camera_angle)
                 visibility = angle_from_back / 90.0  # 0.0 at 180°, 1.0 at 90°/270°
                 visibility = max(0.1, min(1.0, visibility))  # Keep minimum 10% visibility
             
