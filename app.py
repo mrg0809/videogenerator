@@ -942,7 +942,7 @@ def calculate_orbital_perspective_transform(width, height, camera_angle_degrees,
 
 def generate_multi_image_3d_spin_video(image_paths_dict, output_path, frames_per_rotation=60,
                                        perspective_strength=0.3, duration=None,
-                                       video_size=(1920, 1080), bg_color=(255, 255, 255)):
+                                       video_size=(1080, 1920), bg_color=(255, 255, 255)):
     """
     Generate a 3D-like spin/rotation video from multiple product images showing different angles.
     
@@ -1132,8 +1132,8 @@ def select_image_for_angle_smooth(images, angle):
     }
     
     # Find which two views we're between
-    # Transition zone: 20° before and after each view center
-    transition_range = 20
+    # Transition zone: 45° before and after each view center (smoother, longer transitions)
+    transition_range = 45
     
     # Check each view
     for view_name, view_angle in view_angles.items():
@@ -1261,7 +1261,7 @@ def select_image_for_angle(images, angle):
 
 def generate_3d_spin_video(image_path, output_path, frames_per_rotation=60, 
                           perspective_strength=0.3, duration=None, 
-                          video_size=(1920, 1080), bg_color=(255, 255, 255)):
+                          video_size=(1080, 1920), bg_color=(255, 255, 255)):
     """
     Generate a 3D-like spin/rotation video from a product image using perspective transformations.
     
@@ -1800,9 +1800,9 @@ def generate_3d_spin_route():
         front_image.save(front_path)
         uploaded_files.append(front_path)
         
-        # Remove background from front
+        # Remove background from front (vertical format for TikTok)
         front_processed = os.path.join(app.config['UPLOAD_FOLDER'], f"processed_front_{uuid.uuid4().hex}.png")
-        remove_background_only(front_path, front_processed, target_size=(1920, 1080))
+        remove_background_only(front_path, front_processed, target_size=(1080, 1920))
         processed_files.append(front_processed)
         image_paths['front'] = front_processed
         
@@ -1815,7 +1815,7 @@ def generate_3d_spin_route():
             uploaded_files.append(back_path)
             
             back_processed = os.path.join(app.config['UPLOAD_FOLDER'], f"processed_back_{uuid.uuid4().hex}.png")
-            remove_background_only(back_path, back_processed, target_size=(1920, 1080))
+            remove_background_only(back_path, back_processed, target_size=(1080, 1920))
             processed_files.append(back_processed)
             image_paths['back'] = back_processed
         
@@ -1828,7 +1828,7 @@ def generate_3d_spin_route():
             uploaded_files.append(left_path)
             
             left_processed = os.path.join(app.config['UPLOAD_FOLDER'], f"processed_left_{uuid.uuid4().hex}.png")
-            remove_background_only(left_path, left_processed, target_size=(1920, 1080))
+            remove_background_only(left_path, left_processed, target_size=(1080, 1920))
             processed_files.append(left_processed)
             image_paths['left'] = left_processed
         
@@ -1841,7 +1841,7 @@ def generate_3d_spin_route():
             uploaded_files.append(right_path)
             
             right_processed = os.path.join(app.config['UPLOAD_FOLDER'], f"processed_right_{uuid.uuid4().hex}.png")
-            remove_background_only(right_path, right_processed, target_size=(1920, 1080))
+            remove_background_only(right_path, right_processed, target_size=(1080, 1920))
             processed_files.append(right_processed)
             image_paths['right'] = right_processed
         
