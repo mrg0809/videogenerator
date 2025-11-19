@@ -461,7 +461,7 @@ def create_product_animation_clip(image_path, duration=5, video_size=(1920, 1080
                 angle = (t / duration) * 360
                 return angle
             
-            clip = clip.rotate(rotate_func, center='center')
+            clip = clip.rotate(rotate_func)
             
         elif animation_type == 'zoom':
             # Zoom in and out effect
@@ -508,7 +508,7 @@ def create_product_animation_clip(image_path, duration=5, video_size=(1920, 1080
                     scale = 1.3 - (0.6 * ((progress - 0.5) / 0.5))
                 return scale
             
-            clip = clip.rotate(rotate_func, center='center')
+            clip = clip.rotate(rotate_func)
             clip = clip.resize(resize_func)
         
         return clip
