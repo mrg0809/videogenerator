@@ -209,17 +209,56 @@
                 
                 <form method="POST" action="{{ url_for('generate_3d_spin_route') }}" enctype="multipart/form-data" id="spin3dForm">
                     <div class="form-group">
-                        <label for="spin_product_image" class="form-label">
+                        <label for="spin_front_image" class="form-label">
                             <span class="label-icon">📸</span>
-                            Imagen del Producto *
+                            Imagen Frontal del Producto *
                         </label>
                         <input type="file" 
-                               id="spin_product_image" 
-                               name="spin_product_image" 
+                               id="spin_front_image" 
+                               name="spin_front_image" 
                                accept=".png,.jpg,.jpeg" 
                                class="form-input" 
                                required>
-                        <small>Formatos: PNG, JPG, JPEG. El fondo será removido automáticamente.</small>
+                        <small>Vista frontal del producto (0°) - REQUERIDO</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="spin_back_image" class="form-label">
+                            <span class="label-icon">📸</span>
+                            Imagen Trasera del Producto (Opcional)
+                        </label>
+                        <input type="file" 
+                               id="spin_back_image" 
+                               name="spin_back_image" 
+                               accept=".png,.jpg,.jpeg" 
+                               class="form-input">
+                        <small>Vista trasera del producto (180°) - Si no se proporciona, se usará fade effect</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="spin_left_image" class="form-label">
+                            <span class="label-icon">📸</span>
+                            Imagen Lado Izquierdo (Opcional)
+                        </label>
+                        <input type="file" 
+                               id="spin_left_image" 
+                               name="spin_left_image" 
+                               accept=".png,.jpg,.jpeg" 
+                               class="form-input">
+                        <small>Vista del lado izquierdo (270°) - Opcional para mayor realismo</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="spin_right_image" class="form-label">
+                            <span class="label-icon">📸</span>
+                            Imagen Lado Derecho (Opcional)
+                        </label>
+                        <input type="file" 
+                               id="spin_right_image" 
+                               name="spin_right_image" 
+                               accept=".png,.jpg,.jpeg" 
+                               class="form-input">
+                        <small>Vista del lado derecho (90°) - Opcional para mayor realismo</small>
                     </div>
 
                     <div class="form-group">
@@ -321,13 +360,17 @@
             </div>
 
             <div class="instructions-section">
-                <h4>🌀 Efecto 3D Spin:</h4>
+                <h4>🌀 Efecto 3D Spin Multi-Imagen:</h4>
                 <ol>
-                    <li><strong>Imagen del Producto:</strong> Sube una imagen de tu producto (el fondo se eliminará automáticamente).</li>
-                    <li><strong>Fondo Personalizado:</strong> (Opcional) Sube una imagen de fondo. Si no, se usará blanco.</li>
+                    <li><strong>Imagen Frontal:</strong> REQUERIDA - Vista frontal del producto (0°). El fondo se eliminará automáticamente.</li>
+                    <li><strong>Imagen Trasera:</strong> OPCIONAL - Vista trasera del producto (180°). Para rotación 360° completa real.</li>
+                    <li><strong>Imagen Lado Derecho:</strong> OPCIONAL - Vista del lado derecho (90°). Añade más realismo.</li>
+                    <li><strong>Imagen Lado Izquierdo:</strong> OPCIONAL - Vista del lado izquierdo (270°). Añade más realismo.</li>
+                    <li><strong>Fondo Personalizado:</strong> OPCIONAL - Imagen de fondo. Si no se proporciona, se usará blanco.</li>
                     <li><strong>Frames por Rotación:</strong> Selecciona cuántos frames usar para la rotación completa (30-120). Más frames = más suave.</li>
                     <li><strong>Fuerza de Perspectiva:</strong> Controla la intensidad del efecto 3D (0.0-1.0). 0.3 es el valor recomendado.</li>
-                    <li>El sistema genera automáticamente un video con rotación 360° simulando perspectiva 3D.</li>
+                    <li>El sistema cambia automáticamente entre las imágenes según el ángulo de rotación, creando una vista 360° realista.</li>
+                    <li><strong>Tip:</strong> Con solo la imagen frontal, se aplicará un efecto de fade. Con 2-4 imágenes, verás todas las perspectivas reales.</li>
                 </ol>
             </div>
             
@@ -448,11 +491,11 @@
 
         // 3D Spin form validation
         document.getElementById('spin3dForm').addEventListener('submit', function(e) {
-            const productImage = document.getElementById('spin_product_image').files;
+            const frontImage = document.getElementById('spin_front_image').files;
             
-            if (productImage.length === 0) {
+            if (frontImage.length === 0) {
                 e.preventDefault();
-                alert('Por favor selecciona una imagen de producto.');
+                alert('Por favor selecciona al menos la imagen frontal del producto.');
                 return false;
             }
             

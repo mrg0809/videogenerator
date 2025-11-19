@@ -784,6 +784,245 @@ def calculate_perspective_transform(width, height, angle_degrees, perspective_st
     return matrix, new_width, new_height
 
 
+def generate_multi_image_3d_spin_video(image_paths_dict, output_path, frames_per_rotation=60,
+                                       perspective_strength=0.3, duration=None,
+                                       video_size=(1920, 1080), bg_color=(255, 255, 255)):
+    """
+    Generate a 3D-like spin/rotation video from multiple product images showing different angles.
+    
+    Args:
+        image_paths_dict: Dictionary with keys 'front', 'back', 'left', 'right' (only 'front' required)
+        output_path: Path to save the output video
+        frames_per_rotation: Number of frames for complete 360° rotation (default: 60)
+        perspective_strength: Strength of perspective effect, 0.0-1.0 (default: 0.3)
+        duration: Duration of video in seconds (default: calculated from frames_per_rotation)
+        video_size: Output video size (width, height)
+        bg_color: Background color as RGB tuple
+    
+    Returns:
+        str: Path to the generated video
+    """
+    try:
+        print(f"Starting multi-image 3D spin video generation...")
+        print(f"Available views: {list(image_paths_dict.keys())}")
+        print(f"Parameters: {frames_per_rotation} frames, perspective strength: {perspective_strength}")
+        
+        # Load all available images
+        images = {}
+        for view, path in image_paths_dict.items():
+            if path and os.path.exists(path):
+                img = Image.open(path)
+                if img.mode != 'RGBA':
+                    img = img.convert('RGBA')
+                img_array = np.array(img)
+                images[view] = cv2.cvtColor(img_array, cv2.COLOR_RGBA2BGRA)
+                print(f"  Loaded {view} view: {images[view].shape}")
+        
+        if 'front' not in images:
+            raise ValueError("Front view image is required")
+        
+        # Get reference dimensions from front image
+        height, width = images['front'].shape[:2]
+        
+        # Calculate video duration (default: 30 fps)
+        fps = 30
+        if duration is None:
+            duration = frames_per_rotation / fps
+        
+        # Clamp perspective strength to valid range
+        perspective_strength = max(0.0, min(1.0, perspective_strength))
+        
+        # Generate frames with perspective transformation
+        frames = []
+        print(f"Generating {frames_per_rotation} frames...")
+        
+        for i in range(frames_per_rotation):
+            # Calculate rotation angle
+            angle = (i / frames_per_rotation) * 360
+            
+            # Select appropriate image based on angle with smooth transitions
+            current_img, blend_factor = select_image_for_angle(images, angle)
+            
+            # First rotate the image in 2D
+            rotation_matrix = cv2.getRotationMatrix2D((width / 2, height / 2), angle, 1.0)
+            rotated = cv2.warpAffine(current_img, rotation_matrix, (width, height),
+                                    flags=cv2.INTER_LINEAR,
+                                    borderMode=cv2.BORDER_CONSTANT,
+                                    borderValue=(0, 0, 0, 0))
+            
+            # Apply perspective transformation
+            perspective_matrix, new_width, new_height = calculate_perspective_transform(
+                width, height, angle, perspective_strength
+            )
+            
+            # Warp with perspective
+            warped = cv2.warpPerspective(rotated, perspective_matrix,
+                                        (new_width, new_height),
+                                        flags=cv2.INTER_LINEAR,
+                                        borderMode=cv2.BORDER_CONSTANT,
+                                        borderValue=(0, 0, 0, 0))
+            
+            # Apply blend factor if transitioning between images
+            if blend_factor < 1.0:
+                warped[:, :, 3] = (warped[:, :, 3] * blend_factor).astype(np.uint8)
+            
+            # Create canvas with background color
+            canvas = np.zeros((video_size[1], video_size[0], 4), dtype=np.uint8)
+            canvas[:, :, 0:3] = bg_color[::-1]  # BGR format
+            canvas[:, :, 3] = 255  # Full opacity for background
+            
+            # If warped image is larger than canvas, scale it down to fit
+            if new_width > video_size[0] or new_height > video_size[1]:
+                scale = min(video_size[0] / new_width, video_size[1] / new_height) * 0.95
+                new_scaled_width = int(new_width * scale)
+                new_scaled_height = int(new_height * scale)
+                warped = cv2.resize(warped, (new_scaled_width, new_scaled_height), interpolation=cv2.INTER_LINEAR)
+                new_width = new_scaled_width
+                new_height = new_scaled_height
+            
+            # Calculate position to center the warped image
+            y_offset = (video_size[1] - new_height) // 2
+            x_offset = (video_size[0] - new_width) // 2
+            
+            # Ensure offsets are valid
+            y_offset = max(0, y_offset)
+            x_offset = max(0, x_offset)
+            
+            # Calculate boundaries for pasting
+            y_end = min(y_offset + new_height, video_size[1])
+            x_end = min(x_offset + new_width, video_size[0])
+            
+            warped_h = y_end - y_offset
+            warped_w = x_end - x_offset
+            
+            # Composite warped image onto canvas with alpha blending
+            alpha = warped[:warped_h, :warped_w, 3:4] / 255.0
+            canvas[y_offset:y_end, x_offset:x_end, 0:3] = (
+                canvas[y_offset:y_end, x_offset:x_end, 0:3] * (1 - alpha) +
+                warped[:warped_h, :warped_w, 0:3] * alpha
+            ).astype(np.uint8)
+            
+            # Convert BGRA to RGB for MoviePy
+            frame_rgb = cv2.cvtColor(canvas, cv2.COLOR_BGRA2RGB)
+            frames.append(frame_rgb)
+            
+            if (i + 1) % 10 == 0:
+                print(f"  Generated {i + 1}/{frames_per_rotation} frames...")
+        
+        print(f"All frames generated. Creating video...")
+        
+        # Create video from frames using MoviePy
+        from moviepy.editor import ImageSequenceClip
+        
+        video_clip = ImageSequenceClip(frames, fps=fps)
+        video_clip = video_clip.set_duration(duration)
+        
+        # Write video file
+        print("Rendering final video...")
+        video_clip.write_videofile(
+            output_path,
+            codec='libx264',
+            audio=False,
+            fps=fps,
+            preset='medium',
+            threads=4
+        )
+        
+        # Clean up
+        video_clip.close()
+        
+        print("Multi-image 3D spin video generation complete!")
+        return output_path
+    
+    except Exception as e:
+        print(f"Error generating multi-image 3D spin video: {e}")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
+        raise
+
+
+def select_image_for_angle(images, angle):
+    """
+    Select the appropriate image based on rotation angle with smooth transitions.
+    
+    Args:
+        images: Dictionary with keys 'front', 'back', 'left', 'right'
+        angle: Current rotation angle (0-360)
+    
+    Returns:
+        tuple: (selected_image, blend_factor) where blend_factor is 0.0-1.0
+    """
+    # Normalize angle to 0-360
+    angle = angle % 360
+    
+    # Define angle ranges for each view (with transitions)
+    # Front: 315-45° (0° center)
+    # Right: 45-135° (90° center)
+    # Back: 135-225° (180° center)
+    # Left: 225-315° (270° center)
+    
+    if 0 <= angle < 45 or angle >= 315:
+        # Front view
+        return images.get('front', images['front']), 1.0
+    
+    elif 45 <= angle < 90:
+        # Transition from front to right
+        if 'right' in images:
+            # Smooth transition
+            transition = (angle - 45) / 45.0  # 0 to 1
+            # For now, just use right image with full visibility
+            return images['right'], 1.0
+        else:
+            # Fall back to front with fade
+            fade = 1.0 - ((angle - 45) / 90.0)  # 1.0 to 0.5
+            return images['front'], max(0.3, fade)
+    
+    elif 90 <= angle < 135:
+        # Right view or transition to back
+        if 'right' in images:
+            return images['right'], 1.0
+        elif 'back' in images and angle > 112:
+            # Transition towards back
+            return images['back'], 0.7
+        else:
+            # Fade front image
+            return images['front'], 0.3
+    
+    elif 135 <= angle < 225:
+        # Back view
+        if 'back' in images:
+            return images['back'], 1.0
+        else:
+            # Use front image flipped horizontally with fade
+            front_img = images['front']
+            # Flip horizontally
+            flipped = cv2.flip(front_img, 1)
+            # Calculate fade (minimum at 180°)
+            angle_from_back = abs(180 - angle)
+            fade = angle_from_back / 45.0  # 0.0 at 180°, 1.0 at 135°/225°
+            fade = max(0.1, min(1.0, fade))
+            return flipped, fade
+    
+    elif 225 <= angle < 270:
+        # Transition from back to left
+        if 'left' in images:
+            return images['left'], 1.0
+        elif 'back' in images:
+            return images['back'], 0.7
+        else:
+            return images['front'], 0.3
+    
+    else:  # 270 <= angle < 315
+        # Left view or transition to front
+        if 'left' in images:
+            return images['left'], 1.0
+        elif angle > 292:
+            # Transition towards front
+            return images['front'], 0.8
+        else:
+            return images['front'], 0.4
+
+
 def generate_3d_spin_video(image_path, output_path, frames_per_rotation=60, 
                           perspective_strength=0.3, duration=None, 
                           video_size=(1920, 1080), bg_color=(255, 255, 255)):
@@ -1260,29 +1499,33 @@ def generate_product_video_route():
 
 @app.route('/generate_3d_spin', methods=['POST'])
 def generate_3d_spin_route():
-    """Handle 3D spin video generation request."""
+    """Handle 3D spin video generation request with multi-image support."""
     uploaded_files = []
+    processed_files = []
     
     try:
-        # Check if product image is present
-        if 'spin_product_image' not in request.files:
-            flash('No se encontró la imagen del producto', 'error')
+        # Check if front image is present (required)
+        if 'spin_front_image' not in request.files:
+            flash('No se encontró la imagen frontal del producto', 'error')
             return redirect(url_for('index'))
         
-        product_image = request.files['spin_product_image']
+        front_image = request.files['spin_front_image']
+        back_image = request.files.get('spin_back_image')
+        left_image = request.files.get('spin_left_image')
+        right_image = request.files.get('spin_right_image')
         custom_background = request.files.get('spin_background')
         
         # Get parameters
         frames_per_rotation = int(request.form.get('frames_per_rotation', 60))
         perspective_strength = float(request.form.get('perspective_strength', 0.3))
         
-        # Validate product image
-        if product_image.filename == '':
-            flash('No se seleccionó una imagen de producto', 'error')
+        # Validate front image
+        if front_image.filename == '':
+            flash('No se seleccionó la imagen frontal del producto', 'error')
             return redirect(url_for('index'))
         
-        if not allowed_file(product_image.filename, 'image'):
-            flash('Formato de imagen no válido. Use PNG, JPG o JPEG', 'error')
+        if not allowed_file(front_image.filename, 'image'):
+            flash('Formato de imagen frontal no válido. Use PNG, JPG o JPEG', 'error')
             return redirect(url_for('index'))
         
         # Validate parameters
@@ -1293,13 +1536,6 @@ def generate_3d_spin_route():
         if not (0.0 <= perspective_strength <= 1.0):
             flash('La fuerza de perspectiva debe estar entre 0.0 y 1.0', 'error')
             return redirect(url_for('index'))
-        
-        # Save product image
-        print("Guardando imagen de producto...")
-        product_filename = f"{uuid.uuid4().hex}_{secure_filename(product_image.filename)}"
-        product_path = os.path.join(app.config['UPLOAD_FOLDER'], product_filename)
-        product_image.save(product_path)
-        uploaded_files.append(product_path)
         
         # Determine background color
         bg_color = (255, 255, 255)  # Default white
@@ -1320,39 +1556,82 @@ def generate_3d_spin_route():
             else:
                 flash('Formato de imagen de fondo no válido', 'warning')
         
-        # Process image - remove background
-        print("Removiendo fondo de la imagen...")
-        processed_image_path = os.path.join(
-            app.config['UPLOAD_FOLDER'], 
-            f"processed_{uuid.uuid4().hex}.png"
-        )
+        # Save and process images
+        image_paths = {}
         
-        # Remove background and keep transparency
-        remove_background_only(
-            product_path,
-            processed_image_path,
-            target_size=(1920, 1080)
-        )
-        uploaded_files.append(processed_image_path)
+        # Process front image (required)
+        print("Procesando imagen frontal...")
+        front_filename = f"{uuid.uuid4().hex}_{secure_filename(front_image.filename)}"
+        front_path = os.path.join(app.config['UPLOAD_FOLDER'], front_filename)
+        front_image.save(front_path)
+        uploaded_files.append(front_path)
+        
+        # Remove background from front
+        front_processed = os.path.join(app.config['UPLOAD_FOLDER'], f"processed_front_{uuid.uuid4().hex}.png")
+        remove_background_only(front_path, front_processed, target_size=(1920, 1080))
+        processed_files.append(front_processed)
+        image_paths['front'] = front_processed
+        
+        # Process back image (optional)
+        if back_image and back_image.filename != '' and allowed_file(back_image.filename, 'image'):
+            print("Procesando imagen trasera...")
+            back_filename = f"{uuid.uuid4().hex}_{secure_filename(back_image.filename)}"
+            back_path = os.path.join(app.config['UPLOAD_FOLDER'], back_filename)
+            back_image.save(back_path)
+            uploaded_files.append(back_path)
+            
+            back_processed = os.path.join(app.config['UPLOAD_FOLDER'], f"processed_back_{uuid.uuid4().hex}.png")
+            remove_background_only(back_path, back_processed, target_size=(1920, 1080))
+            processed_files.append(back_processed)
+            image_paths['back'] = back_processed
+        
+        # Process left image (optional)
+        if left_image and left_image.filename != '' and allowed_file(left_image.filename, 'image'):
+            print("Procesando imagen lado izquierdo...")
+            left_filename = f"{uuid.uuid4().hex}_{secure_filename(left_image.filename)}"
+            left_path = os.path.join(app.config['UPLOAD_FOLDER'], left_filename)
+            left_image.save(left_path)
+            uploaded_files.append(left_path)
+            
+            left_processed = os.path.join(app.config['UPLOAD_FOLDER'], f"processed_left_{uuid.uuid4().hex}.png")
+            remove_background_only(left_path, left_processed, target_size=(1920, 1080))
+            processed_files.append(left_processed)
+            image_paths['left'] = left_processed
+        
+        # Process right image (optional)
+        if right_image and right_image.filename != '' and allowed_file(right_image.filename, 'image'):
+            print("Procesando imagen lado derecho...")
+            right_filename = f"{uuid.uuid4().hex}_{secure_filename(right_image.filename)}"
+            right_path = os.path.join(app.config['UPLOAD_FOLDER'], right_filename)
+            right_image.save(right_path)
+            uploaded_files.append(right_path)
+            
+            right_processed = os.path.join(app.config['UPLOAD_FOLDER'], f"processed_right_{uuid.uuid4().hex}.png")
+            remove_background_only(right_path, right_processed, target_size=(1920, 1080))
+            processed_files.append(right_processed)
+            image_paths['right'] = right_processed
+        
+        print(f"Total de imágenes procesadas: {len(image_paths)}")
+        print(f"Vistas disponibles: {list(image_paths.keys())}")
         
         # Generate output filename
-        output_filename = f"3d_spin_{uuid.uuid4().hex}.mp4"
+        output_filename = f"3d_spin_multi_{uuid.uuid4().hex}.mp4"
         output_path = os.path.join(app.config['VIDEOS_FOLDER'], output_filename)
         
-        # Generate 3D spin video
-        print("Iniciando generación de video 3D...")
-        flash('Procesando video 3D... Esto puede tomar algunos minutos.', 'info')
-        generate_3d_spin_video(
-            processed_image_path,
+        # Generate multi-image 3D spin video
+        print("Iniciando generación de video 3D con múltiples imágenes...")
+        flash('Procesando video 3D con múltiples perspectivas... Esto puede tomar algunos minutos.', 'info')
+        generate_multi_image_3d_spin_video(
+            image_paths,
             output_path,
             frames_per_rotation=frames_per_rotation,
             perspective_strength=perspective_strength,
             bg_color=bg_color
         )
         
-        # Clean up uploaded files
+        # Clean up uploaded and processed files
         print("Limpiando archivos temporales...")
-        for file_path in uploaded_files:
+        for file_path in uploaded_files + processed_files:
             try:
                 if os.path.exists(file_path):
                     os.remove(file_path)
@@ -1369,7 +1648,7 @@ def generate_3d_spin_route():
         flash(f'Error al generar el video 3D: {str(e)}', 'error')
         
         # Clean up on error
-        for file_path in uploaded_files:
+        for file_path in uploaded_files + processed_files:
             try:
                 if os.path.exists(file_path):
                     os.remove(file_path)
