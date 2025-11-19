@@ -999,43 +999,34 @@ def generate_multi_image_3d_spin_video(image_paths_dict, output_path, frames_per
             # Get primary and secondary images for smooth blending
             current_img, next_img, blend_weight = select_image_for_angle_smooth(images, camera_angle)
             
-            # Product rotates in sync with camera (full 360° rotation)
-            # This creates natural turntable effect
-            product_rotation = camera_angle
+            # For turntable effect: NO 2D rotation of the image!
+            # Product stays upright, only perspective changes as camera orbits
+            # Copy current image as-is (no rotation)
+            img_to_transform = current_img.copy()
             
-            # Rotate product on vertical axis with high-quality interpolation
-            rotation_matrix = cv2.getRotationMatrix2D((width / 2, height / 2), product_rotation, 1.0)
-            rotated = cv2.warpAffine(current_img, rotation_matrix, (width, height),
-                                    flags=cv2.INTER_CUBIC,  # Higher quality interpolation
-                                    borderMode=cv2.BORDER_CONSTANT,
-                                    borderValue=(0, 0, 0, 0))
-            
-            # If blending between views, also rotate next image
+            # If blending between views, blend them first before perspective
             if next_img is not None and blend_weight > 0:
-                rotated_next = cv2.warpAffine(next_img, rotation_matrix, (width, height),
-                                            flags=cv2.INTER_CUBIC,
-                                            borderMode=cv2.BORDER_CONSTANT,
-                                            borderValue=(0, 0, 0, 0))
-                # Blend between current and next image
-                alpha_curr = rotated[:, :, 3:4].astype(float) / 255.0 * (1.0 - blend_weight)
-                alpha_next = rotated_next[:, :, 3:4].astype(float) / 255.0 * blend_weight
+                # Blend between current and next image (both upright)
+                alpha_curr = current_img[:, :, 3:4].astype(float) / 255.0 * (1.0 - blend_weight)
+                alpha_next = next_img[:, :, 3:4].astype(float) / 255.0 * blend_weight
                 alpha_total = alpha_curr + alpha_next
                 alpha_total = np.maximum(alpha_total, 1e-5)  # Avoid division by zero
                 
                 # Blend RGB channels
-                blended_rgb = (rotated[:, :, 0:3].astype(float) * alpha_curr +
-                              rotated_next[:, :, 0:3].astype(float) * alpha_next) / alpha_total
+                blended_rgb = (current_img[:, :, 0:3].astype(float) * alpha_curr +
+                              next_img[:, :, 0:3].astype(float) * alpha_next) / alpha_total
                 blended_alpha = (alpha_total * 255.0).clip(0, 255)
                 
-                rotated = np.dstack([blended_rgb, blended_alpha]).astype(np.uint8)
+                img_to_transform = np.dstack([blended_rgb, blended_alpha]).astype(np.uint8)
             
-            # Apply smoother orbital camera perspective transformation
+            # Apply smooth orbital camera perspective transformation
+            # This simulates camera moving around the stationary product
             perspective_matrix, new_width, new_height = calculate_smooth_orbital_perspective(
                 width, height, camera_angle, perspective_strength
             )
             
             # Warp with perspective using high-quality interpolation
-            warped = cv2.warpPerspective(rotated, perspective_matrix,
+            warped = cv2.warpPerspective(img_to_transform, perspective_matrix,
                                         (new_width, new_height),
                                         flags=cv2.INTER_CUBIC,  # Higher quality
                                         borderMode=cv2.BORDER_CONSTANT,
@@ -1315,26 +1306,21 @@ def generate_3d_spin_video(image_path, output_path, frames_per_rotation=60,
         print(f"Generating {frames_per_rotation} frames...")
         
         for i in range(frames_per_rotation):
-            # Calculate camera angle (orbital rotation)
+            # Calculate camera angle (orbital rotation around product)
             camera_angle = (i / frames_per_rotation) * 360
             
-            # Product rotates in sync with camera for smooth motion
-            product_rotation = camera_angle
-            
-            # Rotate product on vertical axis with high-quality interpolation
-            rotation_matrix = cv2.getRotationMatrix2D((width / 2, height / 2), product_rotation, 1.0)
-            rotated = cv2.warpAffine(img_bgra, rotation_matrix, (width, height), 
-                                    flags=cv2.INTER_CUBIC,  # Higher quality
-                                    borderMode=cv2.BORDER_CONSTANT,
-                                    borderValue=(0, 0, 0, 0))
+            # For turntable effect: NO 2D rotation!
+            # Product stays upright on turntable, only camera perspective changes
+            # Use image as-is (upright), only apply perspective transformation
             
             # Apply smooth orbital camera perspective transformation
+            # This simulates camera orbiting around stationary upright product
             perspective_matrix, new_width, new_height = calculate_smooth_orbital_perspective(
                 width, height, camera_angle, perspective_strength
             )
             
             # Warp with perspective using high-quality interpolation
-            warped = cv2.warpPerspective(rotated, perspective_matrix, 
+            warped = cv2.warpPerspective(img_bgra, perspective_matrix, 
                                         (new_width, new_height),
                                         flags=cv2.INTER_CUBIC,  # Higher quality
                                         borderMode=cv2.BORDER_CONSTANT,
