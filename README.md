@@ -1,14 +1,27 @@
-# 🎬 Video Generator - Generador de Videos con Carrusel
+# 🎬 Video Generator - Generador de Videos Profesionales
 
-Aplicación web Flask que genera videos profesionales combinando un video de introducción con un carrusel de imágenes de productos. Incluye eliminación automática de fondo mejorada, tres tipos de transiciones y reemplazo con fondos personalizados.
+Aplicación web Flask que genera videos profesionales con dos modos principales: **Carrusel de Productos** (combina video de introducción con múltiples productos) y **Animación de Producto** (crea videos animados de productos individuales con efectos de movimiento y rotación). Incluye eliminación automática de fondo mejorada y fondos personalizados.
 
 ## ✨ Características
 
+### 🎞️ Modo Carrusel de Productos
 - **Video de Introducción**: Añade un video al inicio del video final
 - **3 Tipos de Transiciones**: Elige entre Carrusel (deslizamiento horizontal), Tarjetas (fade + slide lateral), o Cinta de Película (efecto vintage con scroll vertical)
+- **Múltiples Productos**: Combina hasta 5 imágenes de productos con transiciones suaves
+
+### 🔄 Modo Animación de Producto (NUEVO)
+- **Animación de Producto Individual**: Crea videos animados de un solo producto
+- **4 Tipos de Animación**: 
+  - Rotación 360° (una vuelta completa)
+  - Rotación + Zoom (dos vueltas con acercamiento)
+  - Zoom In/Out (acercamiento y alejamiento)
+  - Flotante (movimiento suave arriba/abajo)
+- **Duración Configurable**: Elige entre 3, 5, 8 o 10 segundos
+
+### 🎨 Características Comunes
 - **Eliminación de Fondo Mejorada**: Remueve automáticamente el fondo de las imágenes usando rembg con alpha matting para mejor precisión
 - **Fondos Personalizados**: Opción de usar una imagen personalizada como fondo para los productos
-- **Interfaz Web Intuitiva**: Interfaz moderna y fácil de usar
+- **Interfaz Web Intuitiva**: Interfaz moderna con navegación por pestañas
 - **Descarga Directa**: Descarga el video generado directamente desde el navegador
 
 ## 🛠️ Tecnologías Utilizadas
@@ -91,21 +104,43 @@ El servidor se iniciará en `http://localhost:5000`
 
 1. **Abre tu navegador** y accede a `http://localhost:5000`
 
-2. **Sube los archivos requeridos**:
+2. **Selecciona el modo** de generación usando las pestañas en la parte superior:
+
+#### 🎞️ Modo Carrusel de Productos
+
+3. **Sube los archivos requeridos**:
    - **Video de Introducción** (obligatorio): Un archivo de video (MP4, MOV, o AVI)
    - **Imágenes de Productos** (obligatorio): Entre 1 y 5 imágenes (PNG, JPG, o JPEG)
    - **Fondo Personalizado** (opcional): Una imagen para usar como fondo (PNG, JPG, o JPEG)
 
-3. **Selecciona el tipo de transición** entre imágenes:
+4. **Selecciona el tipo de transición** entre imágenes:
    - **Carrusel**: Deslizamiento horizontal suave con escalado
    - **Tarjetas**: Fade out/in con deslizamiento lateral
    - **Cinta de Película**: Efecto negativo vintage con scroll vertical
 
-4. **Haz clic en "Generar Video"**
+5. **Haz clic en "Generar Video con Carrusel"**
 
-5. **Espera** mientras se procesa el video (esto puede tomar varios minutos)
+#### 🔄 Modo Animación de Producto
 
-6. **Descarga** el video generado cuando esté listo
+3. **Sube los archivos requeridos**:
+   - **Imagen del Producto** (obligatorio): Una imagen del producto (PNG, JPG, o JPEG)
+   - **Fondo Personalizado** (opcional): Una imagen para usar como fondo (PNG, JPG, o JPEG)
+
+4. **Selecciona el tipo de animación**:
+   - **Rotación 360°**: Una vuelta completa
+   - **Rotación + Zoom**: Dos vueltas con acercamiento
+   - **Zoom In/Out**: Acercamiento y alejamiento
+   - **Flotante**: Movimiento suave arriba/abajo
+
+5. **Selecciona la duración** del video (3, 5, 8 o 10 segundos)
+
+6. **Haz clic en "Generar Video Animado"**
+
+#### Para ambos modos:
+
+7. **Espera** mientras se procesa el video (esto puede tomar varios minutos)
+
+8. **Descarga** el video generado cuando esté listo
 
 ## 📁 Estructura del Proyecto
 
