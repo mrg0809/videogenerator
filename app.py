@@ -784,6 +784,84 @@ def calculate_perspective_transform(width, height, angle_degrees, perspective_st
     return matrix, new_width, new_height
 
 
+def calculate_orbital_perspective_transform(width, height, camera_angle_degrees, perspective_strength):
+    """
+    Calculate perspective transformation for orbital camera effect.
+    Simulates a camera rotating around a stationary product.
+    
+    Args:
+        width: Image width
+        height: Image height
+        camera_angle_degrees: Camera position angle in degrees (0-360)
+        perspective_strength: Strength of perspective effect (0.0-1.0)
+    
+    Returns:
+        tuple: (transform_matrix, new_width, new_height) for cv2.warpPerspective
+    """
+    # Normalize angle to 0-360
+    angle = camera_angle_degrees % 360
+    angle_rad = np.radians(angle)
+    
+    # Calculate viewing angle effects
+    # At 0°/360°: Camera in front, minimal perspective
+    # At 90°: Camera at right side, maximum horizontal compression
+    # At 180°: Camera at back, minimal perspective
+    # At 270°: Camera at left side, maximum horizontal compression
+    cos_angle = np.cos(angle_rad)
+    sin_angle = np.sin(angle_rad)
+    
+    # Horizontal compression based on side viewing
+    # Product appears narrower when viewed from the side
+    h_compression = 1.0 - (abs(sin_angle) * perspective_strength * 0.6)
+    
+    # Vertical perspective tilt (less pronounced than horizontal)
+    v_tilt = sin_angle * perspective_strength * 0.15
+    
+    # Horizontal shift to simulate orbital camera movement
+    h_shift = sin_angle * perspective_strength * width * 0.1
+    
+    # Define source points (original image corners)
+    src_pts = np.float32([
+        [0, 0],              # Top-left
+        [width, 0],          # Top-right
+        [width, height],     # Bottom-right
+        [0, height]          # Bottom-left
+    ])
+    
+    # Calculate new dimensions with padding
+    new_width = int(width * 1.3)
+    new_height = int(height * 1.15)
+    
+    # Center offset
+    x_offset = (new_width - width) / 2
+    y_offset = (new_height - height) / 2
+    
+    # Calculate destination points for orbital perspective
+    # Apply horizontal compression and subtle vertical tilt
+    compressed_width = width * h_compression
+    width_margin = (width - compressed_width) / 2
+    
+    dst_pts = np.float32([
+        # Top-left
+        [x_offset + width_margin + h_shift + height * v_tilt * 0.05,
+         y_offset],
+        # Top-right  
+        [x_offset + width - width_margin + h_shift + height * v_tilt * 0.05,
+         y_offset],
+        # Bottom-right
+        [x_offset + width - width_margin + h_shift - height * v_tilt * 0.05,
+         y_offset + height],
+        # Bottom-left
+        [x_offset + width_margin + h_shift - height * v_tilt * 0.05,
+         y_offset + height]
+    ])
+    
+    # Get perspective transform matrix
+    matrix = cv2.getPerspectiveTransform(src_pts, dst_pts)
+    
+    return matrix, new_width, new_height
+
+
 def generate_multi_image_3d_spin_video(image_paths_dict, output_path, frames_per_rotation=60,
                                        perspective_strength=0.3, duration=None,
                                        video_size=(1920, 1080), bg_color=(255, 255, 255)):
@@ -837,25 +915,30 @@ def generate_multi_image_3d_spin_video(image_paths_dict, output_path, frames_per
         print(f"Generating {frames_per_rotation} frames...")
         
         for i in range(frames_per_rotation):
-            # Calculate rotation angle
-            angle = (i / frames_per_rotation) * 360
+            # Calculate camera angle (orbital rotation around product)
+            camera_angle = (i / frames_per_rotation) * 360
             
-            # Select appropriate image based on angle with smooth transitions
-            current_img, blend_factor = select_image_for_angle(images, angle)
+            # Select appropriate image based on camera angle
+            current_img, blend_factor = select_image_for_angle(images, camera_angle)
             
-            # First rotate the image in 2D
-            rotation_matrix = cv2.getRotationMatrix2D((width / 2, height / 2), angle, 1.0)
+            # Apply only subtle horizontal rotation to product (turntable effect)
+            # Product rotates slowly on its vertical axis as camera orbits
+            product_rotation = camera_angle * 0.1  # Much less rotation than camera angle
+            
+            # Rotate product slightly on vertical axis only
+            rotation_matrix = cv2.getRotationMatrix2D((width / 2, height / 2), product_rotation, 1.0)
             rotated = cv2.warpAffine(current_img, rotation_matrix, (width, height),
                                     flags=cv2.INTER_LINEAR,
                                     borderMode=cv2.BORDER_CONSTANT,
                                     borderValue=(0, 0, 0, 0))
             
-            # Apply perspective transformation
-            perspective_matrix, new_width, new_height = calculate_perspective_transform(
-                width, height, angle, perspective_strength
+            # Apply orbital camera perspective transformation
+            # This simulates the camera moving around the product
+            perspective_matrix, new_width, new_height = calculate_orbital_perspective_transform(
+                width, height, camera_angle, perspective_strength
             )
             
-            # Warp with perspective
+            # Warp with perspective to simulate camera orbit
             warped = cv2.warpPerspective(rotated, perspective_matrix,
                                         (new_width, new_height),
                                         flags=cv2.INTER_LINEAR,
@@ -1070,22 +1153,26 @@ def generate_3d_spin_video(image_path, output_path, frames_per_rotation=60,
         print(f"Generating {frames_per_rotation} frames...")
         
         for i in range(frames_per_rotation):
-            # Calculate rotation angle
-            angle = (i / frames_per_rotation) * 360
+            # Calculate camera angle (orbital rotation)
+            camera_angle = (i / frames_per_rotation) * 360
             
-            # First rotate the image in 2D
-            rotation_matrix = cv2.getRotationMatrix2D((width / 2, height / 2), angle, 1.0)
+            # Apply only subtle horizontal rotation to product (turntable effect)
+            # Product rotates slowly on its vertical axis
+            product_rotation = camera_angle * 0.1  # Much less rotation than camera
+            
+            # Rotate product slightly on vertical axis only
+            rotation_matrix = cv2.getRotationMatrix2D((width / 2, height / 2), product_rotation, 1.0)
             rotated = cv2.warpAffine(img_bgra, rotation_matrix, (width, height), 
                                     flags=cv2.INTER_LINEAR,
                                     borderMode=cv2.BORDER_CONSTANT,
                                     borderValue=(0, 0, 0, 0))
             
-            # Apply perspective transformation
-            perspective_matrix, new_width, new_height = calculate_perspective_transform(
-                width, height, angle, perspective_strength
+            # Apply orbital camera perspective transformation
+            perspective_matrix, new_width, new_height = calculate_orbital_perspective_transform(
+                width, height, camera_angle, perspective_strength
             )
             
-            # Warp with perspective
+            # Warp with perspective to simulate camera orbit
             warped = cv2.warpPerspective(rotated, perspective_matrix, 
                                         (new_width, new_height),
                                         flags=cv2.INTER_LINEAR,
