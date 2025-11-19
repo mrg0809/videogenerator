@@ -858,24 +858,36 @@ def generate_3d_spin_video(image_path, output_path, frames_per_rotation=60,
             canvas[:, :, 0:3] = bg_color[::-1]  # BGR format
             canvas[:, :, 3] = 255  # Full opacity for background
             
+            # If warped image is larger than canvas, scale it down to fit
+            if new_width > video_size[0] or new_height > video_size[1]:
+                scale = min(video_size[0] / new_width, video_size[1] / new_height) * 0.95  # 95% to add margin
+                new_scaled_width = int(new_width * scale)
+                new_scaled_height = int(new_height * scale)
+                warped = cv2.resize(warped, (new_scaled_width, new_scaled_height), interpolation=cv2.INTER_LINEAR)
+                new_width = new_scaled_width
+                new_height = new_scaled_height
+            
             # Calculate position to center the warped image
             y_offset = (video_size[1] - new_height) // 2
             x_offset = (video_size[0] - new_width) // 2
             
-            # Ensure warped image fits in canvas
-            if y_offset >= 0 and x_offset >= 0:
-                y_end = min(y_offset + new_height, video_size[1])
-                x_end = min(x_offset + new_width, video_size[0])
-                
-                warped_h = y_end - y_offset
-                warped_w = x_end - x_offset
-                
-                # Composite warped image onto canvas with alpha blending
-                alpha = warped[:warped_h, :warped_w, 3:4] / 255.0
-                canvas[y_offset:y_end, x_offset:x_end, 0:3] = (
-                    canvas[y_offset:y_end, x_offset:x_end, 0:3] * (1 - alpha) +
-                    warped[:warped_h, :warped_w, 0:3] * alpha
-                ).astype(np.uint8)
+            # Ensure offsets are valid (should always be true now after scaling)
+            y_offset = max(0, y_offset)
+            x_offset = max(0, x_offset)
+            
+            # Calculate boundaries for pasting
+            y_end = min(y_offset + new_height, video_size[1])
+            x_end = min(x_offset + new_width, video_size[0])
+            
+            warped_h = y_end - y_offset
+            warped_w = x_end - x_offset
+            
+            # Composite warped image onto canvas with alpha blending
+            alpha = warped[:warped_h, :warped_w, 3:4] / 255.0
+            canvas[y_offset:y_end, x_offset:x_end, 0:3] = (
+                canvas[y_offset:y_end, x_offset:x_end, 0:3] * (1 - alpha) +
+                warped[:warped_h, :warped_w, 0:3] * alpha
+            ).astype(np.uint8)
             
             # Convert BGRA to RGB for MoviePy
             frame_rgb = cv2.cvtColor(canvas, cv2.COLOR_BGRA2RGB)
