@@ -7,6 +7,7 @@ from moviepy.editor import VideoFileClip, ImageClip, CompositeVideoClip, concate
 from PIL import Image, ImageDraw
 from rembg import remove
 import numpy as np
+import cv2
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev_secret_key_change_in_production')
@@ -713,6 +714,707 @@ def generate_product_video(product_image_path, background_image_path, output_pat
                 print(f"Warning: Could not delete processed image {processed_image_path}: {e}")
 
 
+def calculate_perspective_transform(width, height, angle_degrees, perspective_strength):
+    """
+    Calculate perspective transformation matrix for simulating 3D rotation.
+    
+    Args:
+        width: Image width
+        height: Image height
+        angle_degrees: Rotation angle in degrees (0-360)
+        perspective_strength: Strength of perspective effect (0.0-1.0)
+    
+    Returns:
+        tuple: (transform_matrix, new_width, new_height) for cv2.warpPerspective
+    """
+    # Normalize angle to 0-360
+    angle = angle_degrees % 360
+    
+    # Calculate perspective distortion based on angle
+    # Maximum distortion at 90° and 270° (side views)
+    # Minimum distortion at 0°, 180°, 360° (front/back views)
+    angle_rad = np.radians(angle)
+    
+    # Use sine to create smooth perspective transition
+    # At 0° and 180°, cos is ±1 (front view, no perspective)
+    # At 90° and 270°, cos is 0 (side view, maximum perspective)
+    cos_angle = np.cos(angle_rad)
+    sin_angle = np.sin(angle_rad)
+    
+    # Calculate horizontal scale factor based on angle
+    # Objects appear narrower when viewed from the side
+    h_scale = 1.0 - (abs(sin_angle) * perspective_strength * 0.7)
+    
+    # Calculate perspective tilt
+    # Positive angles tilt right, negative tilt left
+    tilt_factor = sin_angle * perspective_strength * 0.3
+    
+    # Define source points (original image corners)
+    src_pts = np.float32([
+        [0, 0],              # Top-left
+        [width, 0],          # Top-right
+        [width, height],     # Bottom-right
+        [0, height]          # Bottom-left
+    ])
+    
+    # Calculate new dimensions with padding for rotation
+    new_width = int(width * 1.5)
+    new_height = int(height * 1.2)
+    
+    # Center offset
+    x_offset = (new_width - width) / 2
+    y_offset = (new_height - height) / 2
+    
+    # Calculate destination points with perspective distortion
+    # Apply horizontal scaling and perspective tilt
+    dst_pts = np.float32([
+        [x_offset + width * (1 - h_scale) / 2 + height * tilt_factor * 0.1,
+         y_offset],
+        [x_offset + width - width * (1 - h_scale) / 2 + height * tilt_factor * 0.1,
+         y_offset],
+        [x_offset + width - width * (1 - h_scale) / 2 - height * tilt_factor * 0.1,
+         y_offset + height],
+        [x_offset + width * (1 - h_scale) / 2 - height * tilt_factor * 0.1,
+         y_offset + height]
+    ])
+    
+    # Get perspective transform matrix
+    matrix = cv2.getPerspectiveTransform(src_pts, dst_pts)
+    
+    return matrix, new_width, new_height
+
+
+def calculate_smooth_orbital_perspective(width, height, camera_angle_degrees, perspective_strength):
+    """
+    Calculate smooth perspective transformation for orbital camera effect.
+    Uses progressive transformations for fluid motion.
+    
+    Args:
+        width: Image width
+        height: Image height
+        camera_angle_degrees: Camera position angle in degrees (0-360)
+        perspective_strength: Strength of perspective effect (0.0-1.0)
+    
+    Returns:
+        tuple: (transform_matrix, new_width, new_height) for cv2.warpPerspective
+    """
+    # Normalize angle to 0-360
+    angle = camera_angle_degrees % 360
+    angle_rad = np.radians(angle)
+    
+    # Use smooth sinusoidal functions for natural motion
+    cos_angle = np.cos(angle_rad)
+    sin_angle = np.sin(angle_rad)
+    
+    # Smoother horizontal scale variation (less aggressive)
+    # Use squared sine for smoother transitions
+    h_scale_factor = (sin_angle ** 2) * perspective_strength * 0.35
+    h_scale = 1.0 - h_scale_factor
+    
+    # Very subtle vertical scaling for depth
+    v_scale = 1.0 - (abs(sin_angle) * perspective_strength * 0.08)
+    
+    # Smooth perspective tilt (3D rotation effect)
+    tilt_x = sin_angle * perspective_strength * 0.12
+    tilt_y = cos_angle * perspective_strength * 0.04
+    
+    # Define source points (original image corners)
+    src_pts = np.float32([
+        [0, 0],              # Top-left
+        [width, 0],          # Top-right
+        [width, height],     # Bottom-right
+        [0, height]          # Bottom-left
+    ])
+    
+    # Calculate new dimensions with minimal padding
+    new_width = int(width * 1.2)
+    new_height = int(height * 1.1)
+    
+    # Center offset
+    x_offset = (new_width - width) / 2
+    y_offset = (new_height - height) / 2
+    
+    # Calculate scaled dimensions
+    scaled_width = width * h_scale
+    scaled_height = height * v_scale
+    width_margin = (width - scaled_width) / 2
+    height_margin = (height - scaled_height) / 2
+    
+    # Calculate destination points with smooth perspective
+    dst_pts = np.float32([
+        # Top-left - apply tilt
+        [x_offset + width_margin + height * tilt_x * 0.5,
+         y_offset + height_margin + width * tilt_y * 0.3],
+        # Top-right - apply tilt
+        [x_offset + width - width_margin + height * tilt_x * 0.5,
+         y_offset + height_margin - width * tilt_y * 0.3],
+        # Bottom-right - apply tilt
+        [x_offset + width - width_margin - height * tilt_x * 0.5,
+         y_offset + height - height_margin - width * tilt_y * 0.3],
+        # Bottom-left - apply tilt
+        [x_offset + width_margin - height * tilt_x * 0.5,
+         y_offset + height - height_margin + width * tilt_y * 0.3]
+    ])
+    
+    # Get perspective transform matrix
+    matrix = cv2.getPerspectiveTransform(src_pts, dst_pts)
+    
+    return matrix, new_width, new_height
+
+
+def calculate_orbital_perspective_transform(width, height, camera_angle_degrees, perspective_strength):
+    """
+    Calculate perspective transformation for orbital camera effect.
+    Simulates a camera rotating around a stationary product.
+    
+    Args:
+        width: Image width
+        height: Image height
+        camera_angle_degrees: Camera position angle in degrees (0-360)
+        perspective_strength: Strength of perspective effect (0.0-1.0)
+    
+    Returns:
+        tuple: (transform_matrix, new_width, new_height) for cv2.warpPerspective
+    """
+    # Normalize angle to 0-360
+    angle = camera_angle_degrees % 360
+    angle_rad = np.radians(angle)
+    
+    # Calculate viewing angle effects
+    # At 0°/360°: Camera in front, minimal perspective
+    # At 90°: Camera at right side, maximum horizontal compression
+    # At 180°: Camera at back, minimal perspective
+    # At 270°: Camera at left side, maximum horizontal compression
+    cos_angle = np.cos(angle_rad)
+    sin_angle = np.sin(angle_rad)
+    
+    # Horizontal compression based on side viewing
+    # Product appears narrower when viewed from the side
+    h_compression = 1.0 - (abs(sin_angle) * perspective_strength * 0.6)
+    
+    # Vertical perspective tilt (less pronounced than horizontal)
+    v_tilt = sin_angle * perspective_strength * 0.15
+    
+    # Horizontal shift to simulate orbital camera movement
+    h_shift = sin_angle * perspective_strength * width * 0.1
+    
+    # Define source points (original image corners)
+    src_pts = np.float32([
+        [0, 0],              # Top-left
+        [width, 0],          # Top-right
+        [width, height],     # Bottom-right
+        [0, height]          # Bottom-left
+    ])
+    
+    # Calculate new dimensions with padding
+    new_width = int(width * 1.3)
+    new_height = int(height * 1.15)
+    
+    # Center offset
+    x_offset = (new_width - width) / 2
+    y_offset = (new_height - height) / 2
+    
+    # Calculate destination points for orbital perspective
+    # Apply horizontal compression and subtle vertical tilt
+    compressed_width = width * h_compression
+    width_margin = (width - compressed_width) / 2
+    
+    dst_pts = np.float32([
+        # Top-left
+        [x_offset + width_margin + h_shift + height * v_tilt * 0.05,
+         y_offset],
+        # Top-right  
+        [x_offset + width - width_margin + h_shift + height * v_tilt * 0.05,
+         y_offset],
+        # Bottom-right
+        [x_offset + width - width_margin + h_shift - height * v_tilt * 0.05,
+         y_offset + height],
+        # Bottom-left
+        [x_offset + width_margin + h_shift - height * v_tilt * 0.05,
+         y_offset + height]
+    ])
+    
+    # Get perspective transform matrix
+    matrix = cv2.getPerspectiveTransform(src_pts, dst_pts)
+    
+    return matrix, new_width, new_height
+
+
+def generate_multi_image_3d_spin_video(image_paths_dict, output_path, frames_per_rotation=60,
+                                       perspective_strength=0.3, duration=None,
+                                       video_size=(1080, 1920), bg_color=(255, 255, 255)):
+    """
+    Generate a 3D-like spin/rotation video from multiple product images showing different angles.
+    
+    Args:
+        image_paths_dict: Dictionary with keys 'front', 'back', 'left', 'right' (only 'front' required)
+        output_path: Path to save the output video
+        frames_per_rotation: Number of frames for complete 360° rotation (default: 60)
+        perspective_strength: Strength of perspective effect, 0.0-1.0 (default: 0.3)
+        duration: Duration of video in seconds (default: calculated from frames_per_rotation)
+        video_size: Output video size (width, height)
+        bg_color: Background color as RGB tuple
+    
+    Returns:
+        str: Path to the generated video
+    """
+    try:
+        print(f"Starting multi-image 3D spin video generation...")
+        print(f"Available views: {list(image_paths_dict.keys())}")
+        print(f"Parameters: {frames_per_rotation} frames, perspective strength: {perspective_strength}")
+        
+        # Load all available images
+        images = {}
+        for view, path in image_paths_dict.items():
+            if path and os.path.exists(path):
+                img = Image.open(path)
+                if img.mode != 'RGBA':
+                    img = img.convert('RGBA')
+                img_array = np.array(img)
+                images[view] = cv2.cvtColor(img_array, cv2.COLOR_RGBA2BGRA)
+                print(f"  Loaded {view} view: {images[view].shape}")
+        
+        if 'front' not in images:
+            raise ValueError("Front view image is required")
+        
+        # Get reference dimensions from front image
+        height, width = images['front'].shape[:2]
+        
+        # Calculate video duration (default: 30 fps)
+        fps = 30
+        if duration is None:
+            duration = frames_per_rotation / fps
+        
+        # Clamp perspective strength to valid range
+        perspective_strength = max(0.0, min(1.0, perspective_strength))
+        
+        # Generate frames with perspective transformation
+        frames = []
+        print(f"Generating {frames_per_rotation} frames...")
+        
+        for i in range(frames_per_rotation):
+            # Calculate camera angle (orbital rotation around product)
+            camera_angle = (i / frames_per_rotation) * 360
+            
+            # Get primary and secondary images for smooth blending
+            current_img, next_img, blend_weight = select_image_for_angle_smooth(images, camera_angle)
+            
+            # For turntable effect: NO 2D rotation of the image!
+            # Product stays upright, only perspective changes as camera orbits
+            # Copy current image as-is (no rotation)
+            img_to_transform = current_img.copy()
+            
+            # If blending between views, blend them first before perspective
+            if next_img is not None and blend_weight > 0:
+                # Blend between current and next image (both upright)
+                alpha_curr = current_img[:, :, 3:4].astype(float) / 255.0 * (1.0 - blend_weight)
+                alpha_next = next_img[:, :, 3:4].astype(float) / 255.0 * blend_weight
+                alpha_total = alpha_curr + alpha_next
+                alpha_total = np.maximum(alpha_total, 1e-5)  # Avoid division by zero
+                
+                # Blend RGB channels
+                blended_rgb = (current_img[:, :, 0:3].astype(float) * alpha_curr +
+                              next_img[:, :, 0:3].astype(float) * alpha_next) / alpha_total
+                blended_alpha = (alpha_total * 255.0).clip(0, 255)
+                
+                img_to_transform = np.dstack([blended_rgb, blended_alpha]).astype(np.uint8)
+            
+            # Apply smooth orbital camera perspective transformation
+            # This simulates camera moving around the stationary product
+            perspective_matrix, new_width, new_height = calculate_smooth_orbital_perspective(
+                width, height, camera_angle, perspective_strength
+            )
+            
+            # Warp with perspective using high-quality interpolation
+            warped = cv2.warpPerspective(img_to_transform, perspective_matrix,
+                                        (new_width, new_height),
+                                        flags=cv2.INTER_CUBIC,  # Higher quality
+                                        borderMode=cv2.BORDER_CONSTANT,
+                                        borderValue=(0, 0, 0, 0))
+            
+            # Create canvas with background color
+            canvas = np.zeros((video_size[1], video_size[0], 4), dtype=np.uint8)
+            canvas[:, :, 0:3] = bg_color[::-1]  # BGR format
+            canvas[:, :, 3] = 255  # Full opacity for background
+            
+            # If warped image is larger than canvas, scale it down to fit
+            if new_width > video_size[0] or new_height > video_size[1]:
+                scale = min(video_size[0] / new_width, video_size[1] / new_height) * 0.95
+                new_scaled_width = int(new_width * scale)
+                new_scaled_height = int(new_height * scale)
+                warped = cv2.resize(warped, (new_scaled_width, new_scaled_height), interpolation=cv2.INTER_LINEAR)
+                new_width = new_scaled_width
+                new_height = new_scaled_height
+            
+            # Calculate position to center the warped image
+            y_offset = (video_size[1] - new_height) // 2
+            x_offset = (video_size[0] - new_width) // 2
+            
+            # Ensure offsets are valid
+            y_offset = max(0, y_offset)
+            x_offset = max(0, x_offset)
+            
+            # Calculate boundaries for pasting
+            y_end = min(y_offset + new_height, video_size[1])
+            x_end = min(x_offset + new_width, video_size[0])
+            
+            warped_h = y_end - y_offset
+            warped_w = x_end - x_offset
+            
+            # Composite warped image onto canvas with alpha blending
+            alpha = warped[:warped_h, :warped_w, 3:4] / 255.0
+            canvas[y_offset:y_end, x_offset:x_end, 0:3] = (
+                canvas[y_offset:y_end, x_offset:x_end, 0:3] * (1 - alpha) +
+                warped[:warped_h, :warped_w, 0:3] * alpha
+            ).astype(np.uint8)
+            
+            # Convert BGRA to RGB for MoviePy
+            frame_rgb = cv2.cvtColor(canvas, cv2.COLOR_BGRA2RGB)
+            frames.append(frame_rgb)
+            
+            if (i + 1) % 10 == 0:
+                print(f"  Generated {i + 1}/{frames_per_rotation} frames...")
+        
+        print(f"All frames generated. Creating video...")
+        
+        # Create video from frames using MoviePy
+        from moviepy.editor import ImageSequenceClip
+        
+        video_clip = ImageSequenceClip(frames, fps=fps)
+        video_clip = video_clip.set_duration(duration)
+        
+        # Write video file
+        print("Rendering final video...")
+        video_clip.write_videofile(
+            output_path,
+            codec='libx264',
+            audio=False,
+            fps=fps,
+            preset='medium',
+            threads=4
+        )
+        
+        # Clean up
+        video_clip.close()
+        
+        print("Multi-image 3D spin video generation complete!")
+        return output_path
+    
+    except Exception as e:
+        print(f"Error generating multi-image 3D spin video: {e}")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
+        raise
+
+
+def select_image_for_angle_smooth(images, angle):
+    """
+    Select images for smooth blending based on rotation angle.
+    Returns two images and a blend weight for seamless transitions.
+    
+    Args:
+        images: Dictionary with keys 'front', 'back', 'left', 'right'
+        angle: Current rotation angle (0-360)
+    
+    Returns:
+        tuple: (current_image, next_image, blend_weight)
+               blend_weight: 0.0 = use current only, 1.0 = use next only
+    """
+    # Normalize angle to 0-360
+    angle = angle % 360
+    
+    # Define view centers
+    view_angles = {
+        'front': 0,
+        'right': 90,
+        'back': 180,
+        'left': 270
+    }
+    
+    # Find which two views we're between
+    # Transition zone: 45° before and after each view center (smoother, longer transitions)
+    transition_range = 45
+    
+    # Check each view
+    for view_name, view_angle in view_angles.items():
+        if view_name not in images:
+            continue
+            
+        # Calculate angular distance (handling wraparound at 0/360)
+        dist = abs(angle - view_angle)
+        if dist > 180:
+            dist = 360 - dist
+            
+        # If we're close to this view center
+        if dist <= transition_range:
+            # Determine next view for blending
+            next_view = None
+            if angle > view_angle or (view_angle == 0 and angle > 340):
+                # Moving clockwise
+                next_view_name = {
+                    'front': 'right',
+                    'right': 'back',
+                    'back': 'left',
+                    'left': 'front'
+                }.get(view_name)
+                next_view = images.get(next_view_name)
+            elif angle < view_angle or (view_angle == 0 and angle < 20):
+                # Moving counter-clockwise
+                next_view_name = {
+                    'front': 'left',
+                    'left': 'back',
+                    'back': 'right',
+                    'right': 'front'
+                }.get(view_name)
+                next_view = images.get(next_view_name)
+            
+            # Calculate blend weight (0 at center, 1 at transition edge)
+            blend_weight = dist / transition_range if next_view is not None else 0.0
+            
+            return images[view_name], next_view, blend_weight
+    
+    # Default: use front view without blending
+    return images.get('front', images['front']), None, 0.0
+
+
+def select_image_for_angle(images, angle):
+    """
+    Select the appropriate image based on rotation angle with smooth transitions.
+    
+    Args:
+        images: Dictionary with keys 'front', 'back', 'left', 'right'
+        angle: Current rotation angle (0-360)
+    
+    Returns:
+        tuple: (selected_image, blend_factor) where blend_factor is 0.0-1.0
+    """
+    # Normalize angle to 0-360
+    angle = angle % 360
+    
+    # Define angle ranges for each view (with transitions)
+    # Front: 315-45° (0° center)
+    # Right: 45-135° (90° center)
+    # Back: 135-225° (180° center)
+    # Left: 225-315° (270° center)
+    
+    if 0 <= angle < 45 or angle >= 315:
+        # Front view
+        return images.get('front', images['front']), 1.0
+    
+    elif 45 <= angle < 90:
+        # Transition from front to right
+        if 'right' in images:
+            # Smooth transition
+            transition = (angle - 45) / 45.0  # 0 to 1
+            # For now, just use right image with full visibility
+            return images['right'], 1.0
+        else:
+            # Fall back to front with fade
+            fade = 1.0 - ((angle - 45) / 90.0)  # 1.0 to 0.5
+            return images['front'], max(0.3, fade)
+    
+    elif 90 <= angle < 135:
+        # Right view or transition to back
+        if 'right' in images:
+            return images['right'], 1.0
+        elif 'back' in images and angle > 112:
+            # Transition towards back
+            return images['back'], 0.7
+        else:
+            # Fade front image
+            return images['front'], 0.3
+    
+    elif 135 <= angle < 225:
+        # Back view
+        if 'back' in images:
+            return images['back'], 1.0
+        else:
+            # Use front image flipped horizontally with fade
+            front_img = images['front']
+            # Flip horizontally
+            flipped = cv2.flip(front_img, 1)
+            # Calculate fade (minimum at 180°)
+            angle_from_back = abs(180 - angle)
+            fade = angle_from_back / 45.0  # 0.0 at 180°, 1.0 at 135°/225°
+            fade = max(0.1, min(1.0, fade))
+            return flipped, fade
+    
+    elif 225 <= angle < 270:
+        # Transition from back to left
+        if 'left' in images:
+            return images['left'], 1.0
+        elif 'back' in images:
+            return images['back'], 0.7
+        else:
+            return images['front'], 0.3
+    
+    else:  # 270 <= angle < 315
+        # Left view or transition to front
+        if 'left' in images:
+            return images['left'], 1.0
+        elif angle > 292:
+            # Transition towards front
+            return images['front'], 0.8
+        else:
+            return images['front'], 0.4
+
+
+def generate_3d_spin_video(image_path, output_path, frames_per_rotation=60, 
+                          perspective_strength=0.3, duration=None, 
+                          video_size=(1080, 1920), bg_color=(255, 255, 255)):
+    """
+    Generate a 3D-like spin/rotation video from a product image using perspective transformations.
+    
+    Args:
+        image_path: Path to the product image (should have transparent background)
+        output_path: Path to save the output video
+        frames_per_rotation: Number of frames for complete 360° rotation (default: 60)
+        perspective_strength: Strength of perspective effect, 0.0-1.0 (default: 0.3)
+        duration: Duration of video in seconds (default: calculated from frames_per_rotation)
+        video_size: Output video size (width, height)
+        bg_color: Background color as RGB tuple
+    
+    Returns:
+        str: Path to the generated video
+    """
+    try:
+        print(f"Starting 3D spin video generation...")
+        print(f"Parameters: {frames_per_rotation} frames, perspective strength: {perspective_strength}")
+        
+        # Load image with transparency
+        img = Image.open(image_path)
+        if img.mode != 'RGBA':
+            img = img.convert('RGBA')
+        
+        # Convert PIL to OpenCV format (BGRA)
+        img_array = np.array(img)
+        img_bgra = cv2.cvtColor(img_array, cv2.COLOR_RGBA2BGRA)
+        
+        # Get image dimensions
+        height, width = img_bgra.shape[:2]
+        
+        # Calculate video duration (default: 30 fps)
+        fps = 30
+        if duration is None:
+            duration = frames_per_rotation / fps
+        
+        # Clamp perspective strength to valid range
+        perspective_strength = max(0.0, min(1.0, perspective_strength))
+        
+        # Generate frames with perspective transformation
+        frames = []
+        print(f"Generating {frames_per_rotation} frames...")
+        
+        for i in range(frames_per_rotation):
+            # Calculate camera angle (orbital rotation around product)
+            camera_angle = (i / frames_per_rotation) * 360
+            
+            # For turntable effect: NO 2D rotation!
+            # Product stays upright on turntable, only camera perspective changes
+            # Use image as-is (upright), only apply perspective transformation
+            
+            # Apply smooth orbital camera perspective transformation
+            # This simulates camera orbiting around stationary upright product
+            perspective_matrix, new_width, new_height = calculate_smooth_orbital_perspective(
+                width, height, camera_angle, perspective_strength
+            )
+            
+            # Warp with perspective using high-quality interpolation
+            warped = cv2.warpPerspective(img_bgra, perspective_matrix, 
+                                        (new_width, new_height),
+                                        flags=cv2.INTER_CUBIC,  # Higher quality
+                                        borderMode=cv2.BORDER_CONSTANT,
+                                        borderValue=(0, 0, 0, 0))
+            
+            # Apply visibility fade for back side (90-270 degrees)
+            # This makes it realistic - we can't see the back of a 2D image
+            visibility = 1.0
+            if 90 < camera_angle < 270:
+                # Fade out when showing the "back" that we don't have
+                # Maximum fade at 180° (directly behind)
+                angle_from_back = abs(180 - camera_angle)
+                visibility = angle_from_back / 90.0  # 0.0 at 180°, 1.0 at 90°/270°
+                visibility = max(0.1, min(1.0, visibility))  # Keep minimum 10% visibility
+            
+            # Apply visibility to alpha channel
+            if visibility < 1.0:
+                warped[:, :, 3] = (warped[:, :, 3] * visibility).astype(np.uint8)
+            
+            # Create canvas with background color
+            canvas = np.zeros((video_size[1], video_size[0], 4), dtype=np.uint8)
+            canvas[:, :, 0:3] = bg_color[::-1]  # BGR format
+            canvas[:, :, 3] = 255  # Full opacity for background
+            
+            # If warped image is larger than canvas, scale it down to fit
+            if new_width > video_size[0] or new_height > video_size[1]:
+                scale = min(video_size[0] / new_width, video_size[1] / new_height) * 0.95  # 95% to add margin
+                new_scaled_width = int(new_width * scale)
+                new_scaled_height = int(new_height * scale)
+                warped = cv2.resize(warped, (new_scaled_width, new_scaled_height), interpolation=cv2.INTER_LINEAR)
+                new_width = new_scaled_width
+                new_height = new_scaled_height
+            
+            # Calculate position to center the warped image
+            y_offset = (video_size[1] - new_height) // 2
+            x_offset = (video_size[0] - new_width) // 2
+            
+            # Ensure offsets are valid (should always be true now after scaling)
+            y_offset = max(0, y_offset)
+            x_offset = max(0, x_offset)
+            
+            # Calculate boundaries for pasting
+            y_end = min(y_offset + new_height, video_size[1])
+            x_end = min(x_offset + new_width, video_size[0])
+            
+            warped_h = y_end - y_offset
+            warped_w = x_end - x_offset
+            
+            # Composite warped image onto canvas with alpha blending
+            alpha = warped[:warped_h, :warped_w, 3:4] / 255.0
+            canvas[y_offset:y_end, x_offset:x_end, 0:3] = (
+                canvas[y_offset:y_end, x_offset:x_end, 0:3] * (1 - alpha) +
+                warped[:warped_h, :warped_w, 0:3] * alpha
+            ).astype(np.uint8)
+            
+            # Convert BGRA to RGB for MoviePy
+            frame_rgb = cv2.cvtColor(canvas, cv2.COLOR_BGRA2RGB)
+            frames.append(frame_rgb)
+            
+            if (i + 1) % 10 == 0:
+                print(f"  Generated {i + 1}/{frames_per_rotation} frames...")
+        
+        print(f"All frames generated. Creating video...")
+        
+        # Create video from frames using MoviePy
+        from moviepy.editor import ImageSequenceClip
+        
+        video_clip = ImageSequenceClip(frames, fps=fps)
+        video_clip = video_clip.set_duration(duration)
+        
+        # Write video file
+        print("Rendering final video...")
+        video_clip.write_videofile(
+            output_path,
+            codec='libx264',
+            audio=False,
+            fps=fps,
+            preset='medium',
+            threads=4
+        )
+        
+        # Clean up
+        video_clip.close()
+        
+        print("3D spin video generation complete!")
+        return output_path
+    
+    except Exception as e:
+        print(f"Error generating 3D spin video: {e}")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
+        raise
+
+
 def generate_video(intro_path, product_images, background_image_path, output_path, remove_bg=True, transition_type='carousel'):
     """
     Generate the final video with intro and product images using selected transition effect.
@@ -1020,6 +1722,167 @@ def generate_product_video_route():
         
         # Clean up on error
         for file_path in uploaded_files:
+            try:
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+            except:
+                pass
+        
+        return redirect(url_for('index'))
+
+
+@app.route('/generate_3d_spin', methods=['POST'])
+def generate_3d_spin_route():
+    """Handle 3D spin video generation request with multi-image support."""
+    uploaded_files = []
+    processed_files = []
+    
+    try:
+        # Check if front image is present (required)
+        if 'spin_front_image' not in request.files:
+            flash('No se encontró la imagen frontal del producto', 'error')
+            return redirect(url_for('index'))
+        
+        front_image = request.files['spin_front_image']
+        back_image = request.files.get('spin_back_image')
+        left_image = request.files.get('spin_left_image')
+        right_image = request.files.get('spin_right_image')
+        custom_background = request.files.get('spin_background')
+        
+        # Get parameters
+        frames_per_rotation = int(request.form.get('frames_per_rotation', 60))
+        perspective_strength = float(request.form.get('perspective_strength', 0.3))
+        
+        # Validate front image
+        if front_image.filename == '':
+            flash('No se seleccionó la imagen frontal del producto', 'error')
+            return redirect(url_for('index'))
+        
+        if not allowed_file(front_image.filename, 'image'):
+            flash('Formato de imagen frontal no válido. Use PNG, JPG o JPEG', 'error')
+            return redirect(url_for('index'))
+        
+        # Validate parameters
+        if not (30 <= frames_per_rotation <= 120):
+            flash('El número de frames debe estar entre 30 y 120', 'error')
+            return redirect(url_for('index'))
+        
+        if not (0.0 <= perspective_strength <= 1.0):
+            flash('La fuerza de perspectiva debe estar entre 0.0 y 1.0', 'error')
+            return redirect(url_for('index'))
+        
+        # Determine background color
+        bg_color = (255, 255, 255)  # Default white
+        if custom_background and custom_background.filename != '':
+            if allowed_file(custom_background.filename, 'image'):
+                print("Guardando imagen de fondo personalizado...")
+                bg_filename = f"{uuid.uuid4().hex}_{secure_filename(custom_background.filename)}"
+                background_path = os.path.join(app.config['UPLOAD_FOLDER'], bg_filename)
+                custom_background.save(background_path)
+                uploaded_files.append(background_path)
+                
+                # Get average color from custom background
+                bg_img = Image.open(background_path)
+                bg_img_resized = bg_img.resize((100, 100))
+                bg_array = np.array(bg_img_resized)
+                bg_color = tuple(bg_array.mean(axis=(0, 1)).astype(int).tolist()[:3])
+                bg_img.close()
+            else:
+                flash('Formato de imagen de fondo no válido', 'warning')
+        
+        # Save and process images
+        image_paths = {}
+        
+        # Process front image (required)
+        print("Procesando imagen frontal...")
+        front_filename = f"{uuid.uuid4().hex}_{secure_filename(front_image.filename)}"
+        front_path = os.path.join(app.config['UPLOAD_FOLDER'], front_filename)
+        front_image.save(front_path)
+        uploaded_files.append(front_path)
+        
+        # Remove background from front (vertical format for TikTok)
+        front_processed = os.path.join(app.config['UPLOAD_FOLDER'], f"processed_front_{uuid.uuid4().hex}.png")
+        remove_background_only(front_path, front_processed, target_size=(1080, 1920))
+        processed_files.append(front_processed)
+        image_paths['front'] = front_processed
+        
+        # Process back image (optional)
+        if back_image and back_image.filename != '' and allowed_file(back_image.filename, 'image'):
+            print("Procesando imagen trasera...")
+            back_filename = f"{uuid.uuid4().hex}_{secure_filename(back_image.filename)}"
+            back_path = os.path.join(app.config['UPLOAD_FOLDER'], back_filename)
+            back_image.save(back_path)
+            uploaded_files.append(back_path)
+            
+            back_processed = os.path.join(app.config['UPLOAD_FOLDER'], f"processed_back_{uuid.uuid4().hex}.png")
+            remove_background_only(back_path, back_processed, target_size=(1080, 1920))
+            processed_files.append(back_processed)
+            image_paths['back'] = back_processed
+        
+        # Process left image (optional)
+        if left_image and left_image.filename != '' and allowed_file(left_image.filename, 'image'):
+            print("Procesando imagen lado izquierdo...")
+            left_filename = f"{uuid.uuid4().hex}_{secure_filename(left_image.filename)}"
+            left_path = os.path.join(app.config['UPLOAD_FOLDER'], left_filename)
+            left_image.save(left_path)
+            uploaded_files.append(left_path)
+            
+            left_processed = os.path.join(app.config['UPLOAD_FOLDER'], f"processed_left_{uuid.uuid4().hex}.png")
+            remove_background_only(left_path, left_processed, target_size=(1080, 1920))
+            processed_files.append(left_processed)
+            image_paths['left'] = left_processed
+        
+        # Process right image (optional)
+        if right_image and right_image.filename != '' and allowed_file(right_image.filename, 'image'):
+            print("Procesando imagen lado derecho...")
+            right_filename = f"{uuid.uuid4().hex}_{secure_filename(right_image.filename)}"
+            right_path = os.path.join(app.config['UPLOAD_FOLDER'], right_filename)
+            right_image.save(right_path)
+            uploaded_files.append(right_path)
+            
+            right_processed = os.path.join(app.config['UPLOAD_FOLDER'], f"processed_right_{uuid.uuid4().hex}.png")
+            remove_background_only(right_path, right_processed, target_size=(1080, 1920))
+            processed_files.append(right_processed)
+            image_paths['right'] = right_processed
+        
+        print(f"Total de imágenes procesadas: {len(image_paths)}")
+        print(f"Vistas disponibles: {list(image_paths.keys())}")
+        
+        # Generate output filename
+        output_filename = f"3d_spin_multi_{uuid.uuid4().hex}.mp4"
+        output_path = os.path.join(app.config['VIDEOS_FOLDER'], output_filename)
+        
+        # Generate multi-image 3D spin video
+        print("Iniciando generación de video 3D con múltiples imágenes...")
+        flash('Procesando video 3D con múltiples perspectivas... Esto puede tomar algunos minutos.', 'info')
+        generate_multi_image_3d_spin_video(
+            image_paths,
+            output_path,
+            frames_per_rotation=frames_per_rotation,
+            perspective_strength=perspective_strength,
+            bg_color=bg_color
+        )
+        
+        # Clean up uploaded and processed files
+        print("Limpiando archivos temporales...")
+        for file_path in uploaded_files + processed_files:
+            try:
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+            except Exception as e:
+                print(f"Warning: Could not delete file {file_path}: {e}")
+        
+        flash('¡Video 3D generado exitosamente!', 'success')
+        return render_template('index.html', video_filename=output_filename)
+    
+    except Exception as e:
+        print(f"Error en generate_3d_spin_route: {e}")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
+        flash(f'Error al generar el video 3D: {str(e)}', 'error')
+        
+        # Clean up on error
+        for file_path in uploaded_files + processed_files:
             try:
                 if os.path.exists(file_path):
                     os.remove(file_path)

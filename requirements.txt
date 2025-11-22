@@ -4,3 +4,4 @@ moviepy==1.0.3
 Pillow==10.1.0
 rembg==2.0.56
 numpy>=1.26.0
+opencv-python>=4.8.0
