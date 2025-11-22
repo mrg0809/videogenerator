@@ -69,12 +69,12 @@ echo.
 
 REM Verifica e instala dependencias
 echo [4/5] Verificando dependencias...
-pip show Flask >nul 2>&1
-if %errorlevel% neq 0 (
+pip show Flask 1>nul 2>nul
+if errorlevel 1 (
     echo Instalando dependencias (esto puede tomar varios minutos)...
     echo.
     pip install -r requirements.txt
-    if %errorlevel% neq 0 (
+    if errorlevel 1 (
         echo.
         echo ERROR: No se pudieron instalar las dependencias
         echo.
@@ -98,8 +98,8 @@ echo.
 
 REM Verifica FFmpeg
 echo Verificando FFmpeg...
-ffmpeg -version >nul 2>&1
-if %errorlevel% neq 0 (
+ffmpeg -version 1>nul 2>nul
+if errorlevel 1 (
     echo.
     echo ADVERTENCIA: FFmpeg no esta instalado o no esta en el PATH
     echo.

@@ -1,0 +1,46 @@
+ * Serving Flask app 'app'
+ * Debug mode: on
+[31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.100.21:5000
+[33mPress CTRL+C to quit[0m
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 139-824-241
+127.0.0.1 - - [13/Nov/2025 14:13:41] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [13/Nov/2025 14:13:41] "[36mGET /static/style.css HTTP/1.1[0m" 304 -
+Guardando video de introducción...
+Guardando imágenes de productos...
+Iniciando generación de video...
+Loading intro video...
+Processing 4 product images...
+Processing image 1/4...
+DEBUG: create_card_transition_clip called with image_path=/home/rm/Desarrollo/videogenerator/uploads/processed_ffca1d2d08eb4985b1177bdc041cd9ec.jpg
+DEBUG: ImageClip created successfully
+DEBUG: About to apply position_func
+DEBUG: Position applied successfully
+Processing image 2/4...
+DEBUG: create_card_transition_clip called with image_path=/home/rm/Desarrollo/videogenerator/uploads/processed_0a5843215f104afe9b6f0c098c5e8637.jpg
+DEBUG: ImageClip created successfully
+DEBUG: About to apply position_func
+DEBUG: Position applied successfully
+Processing image 3/4...
+DEBUG: create_card_transition_clip called with image_path=/home/rm/Desarrollo/videogenerator/uploads/processed_2391d91c94cf473b8fb980dce60c3838.jpg
+DEBUG: ImageClip created successfully
+DEBUG: About to apply position_func
+DEBUG: Position applied successfully
+Processing image 4/4...
+DEBUG: create_card_transition_clip called with image_path=/home/rm/Desarrollo/videogenerator/uploads/processed_aee8007dfbda4660b72ad14b9a2803ca.jpg
+DEBUG: ImageClip created successfully
+DEBUG: About to apply position_func
+DEBUG: Position applied successfully
+Concatenating clips...
+Rendering final video...
+Moviepy - Building video /home/rm/Desarrollo/videogenerator/videos/video_1fcc00c25c76492bb98b9c3d581881a4.mp4.
+MoviePy - Writing audio in video_1fcc00c25c76492bb98b9c3d581881a4TEMP_MPY_wvf_snd.mp4
+chunk:   0%|          | 0/129 [00:00<?, ?it/s, now=None]                                                        MoviePy - Done.
+Moviepy - Writing video /home/rm/Desarrollo/videogenerator/videos/video_1fcc00c25c76492bb98b9c3d581881a4.mp4
+
+t:   0%|          | 0/429 [00:00<?, ?it/s, now=None]t:   2%|▏         | 7/429 [00:00<00:07, 59.19it/s, now=None]t:   3%|▎         | 13/429 [00:00<00:07, 52.05it/s, now=None]t:   4%|▍         | 19/429 [00:00<00:07, 53.21it/s, now=None]t:   6%|▌         | 25/429 [00:00<00:07, 53.90it/s, now=None]t:   7%|▋         | 31/429 [00:00<00:07, 54.16it/s, now=None]t:   9%|▊         | 37/429 [00:00<00:07, 52.46it/s, now=None]t:  10%|█         | 43/429 [00:00<00:07, 50.95it/s, now=None]t:  11%|█▏        | 49/429 [00:00<00:07, 49.78it/s, now=None]t:  13%|█▎        | 54/429 [00:01<00:07, 49.69it/s, now=None]t:  14%|█▍        | 60/429 [00:01<00:07, 50.59it/s, now=None]t:  15%|█▌        | 66/429 [00:01<00:07, 48.52it/s, now=None]t:  17%|█▋        | 71/429 [00:01<00:07, 45.74it/s, now=None]t:  18%|█▊        | 76/429 [00:01<00:08, 42.50it/s, now=None]t:  19%|█▉        | 81/429 [00:01<00:08, 41.52it/s, now=None]t:  20%|██        | 86/429 [00:01<00:08, 41.63it/s, now=None]t:  21%|██        | 91/429 [00:01<00:08, 40.78it/s, now=None]t:  23%|██▎       | 97/429 [00:02<00:07, 44.53it/s, now=None]t:  24%|██▍       | 103/429 [00:02<00:07, 46.30it/s, now=None]t:  25%|██▌       | 108/429 [00:02<00:07, 45.60it/s, now=None]t:  26%|██▋       | 113/429 [00:02<00:07, 44.04it/s, now=None]t:  28%|██▊       | 118/429 [00:02<00:06, 44.79it/s, now=None]t:  29%|██▊       | 123/429 [00:02<00:07, 43.35it/s, now=None]t:  30%|██▉       | 128/429 [00:02<00:06, 43.88it/s, now=None]t:  31%|███       | 133/429 [00:02<00:06, 42.42it/s, now=None]t:  32%|███▏      | 138/429 [00:02<00:06, 43.48it/s, now=None]t:  33%|███▎      | 143/429 [00:03<00:06, 41.19it/s, now=None]t:  35%|███▍      | 150/429 [00:03<00:06, 45.88it/s, now=None]t:  37%|███▋      | 157/429 [00:03<00:05, 50.65it/s, now=None]t:  38%|███▊      | 164/429 [00:03<00:04, 54.91it/s, now=None]t:  40%|███▉      | 170/429 [00:03<00:04, 55.25it/s, now=None]t:  41%|████      | 176/429 [00:03<00:05, 50.06it/s, now=None]t:  42%|████▏     | 182/429 [00:03<00:05, 44.78it/s, now=None]t:  44%|████▎     | 187/429 [00:04<00:05, 41.45it/s, now=None]t:  45%|████▍     | 193/429 [00:04<00:05, 45.73it/s, now=None]t:  46%|████▋     | 199/429 [00:04<00:04, 48.73it/s, now=None]t:  48%|████▊     | 205/429 [00:04<00:04, 50.46it/s, now=None]t:  49%|████▉     | 212/429 [00:04<00:04, 53.03it/s, now=None]t:  51%|█████     | 218/429 [00:04<00:04, 46.87it/s, now=None]t:  52%|█████▏    | 223/429 [00:04<00:04, 45.99it/s, now=None]t:  54%|█████▎    | 230/429 [00:04<00:03, 50.51it/s, now=None]t:  55%|█████▌    | 236/429 [00:04<00:03, 52.94it/s, now=None]t:  57%|█████▋    | 243/429 [00:05<00:03, 57.22it/s, now=None]t:  58%|█████▊    | 250/429 [00:05<00:02, 60.21it/s, now=None]t:  60%|██████    | 258/429 [00:05<00:02, 63.07it/s, now=None]t:  62%|██████▏   | 265/429 [00:05<00:02, 62.70it/s, now=None]t:  63%|██████▎   | 272/429 [00:05<00:02, 64.50it/s, now=None]t:  65%|██████▌   | 280/429 [00:05<00:02, 66.71it/s, now=None]t:  67%|██████▋   | 287/429 [00:05<00:02, 67.06it/s, now=None]t:  69%|██████▊   | 294/429 [00:05<00:01, 67.55it/s, now=None]t:  70%|███████   | 301/429 [00:05<00:01, 67.27it/s, now=None]t:  72%|███████▏  | 309/429 [00:06<00:01, 68.92it/s, now=None]t:  74%|███████▎  | 316/429 [00:06<00:01, 68.71it/s, now=None]t:  75%|███████▌  | 323/429 [00:06<00:01, 67.93it/s, now=None]t:  77%|███████▋  | 330/429 [00:06<00:01, 68.04it/s, now=None]t:  79%|███████▊  | 337/429 [00:06<00:01, 63.45it/s, now=None]t:  80%|████████  | 344/429 [00:06<00:01, 63.23it/s, now=None]t:  82%|████████▏ | 351/429 [00:06<00:01, 63.56it/s, now=None]t:  83%|████████▎ | 358/429 [00:06<00:01, 63.52it/s, now=None]t:  85%|████████▌ | 365/429 [00:06<00:00, 64.27it/s, now=None]t:  87%|████████▋ | 372/429 [00:06<00:00, 64.97it/s, now=None]t:  88%|████████▊ | 379/429 [00:07<00:00, 65.56it/s, now=None]t:  90%|████████▉ | 386/429 [00:07<00:00, 66.21it/s, now=None]t:  92%|█████████▏| 393/429 [00:07<00:00, 66.16it/s, now=None]t:  93%|█████████▎| 400/429 [00:07<00:00, 65.93it/s, now=None]t:  95%|█████████▍| 407/429 [00:07<00:00, 65.45it/s, now=None]t:  97%|█████████▋| 414/429 [00:07<00:00, 65.35it/s, now=None]t:  98%|█████████▊| 421/429 [00:07<00:00, 64.00it/s, now=None]t: 100%|█████████▉| 428/429 [00:07<00:00, 64.99it/s, now=None]                                                              127.0.0.1 - - [13/Nov/2025 14:14:25] "POST /generate_video HTTP/1.1" 200 -
+127.0.0.1 - - [13/Nov/2025 14:14:25] "[36mGET /static/style.css HTTP/1.1[0m" 304 -
