@@ -1415,17 +1415,19 @@ def generate_3d_spin_video(image_path, output_path, frames_per_rotation=60,
         raise
 
 
-def generate_video(intro_path, product_images, background_image_path, output_path, remove_bg=True, transition_type='carousel'):
+def generate_video(intro_path, product_images, background_image_path, output_path, outro_path=None, remove_bg=True, transition_type='carousel', video_format='tiktok'):
     """
-    Generate the final video with intro and product images using selected transition effect.
+    Generate the final video with optional intro/outro and product images using selected transition effect.
     
     Args:
-        intro_path: Path to intro video
+        intro_path: Path to intro video (can be None for no intro)
         product_images: List of paths to product images
         background_image_path: Path to custom background image (can be None)
         output_path: Path to save the output video
+        outro_path: Path to outro video (can be None for no outro)
         remove_bg: Whether to remove background from images (default: True)
         transition_type: Type of transition ('carousel', 'card', or 'filmstrip')
+        video_format: Video format ('tiktok' for 1080x1920, 'youtube' for 1920x1080)
     
     Returns:
         str: Path to the generated video
@@ -1434,13 +1436,31 @@ def generate_video(intro_path, product_images, background_image_path, output_pat
     processed_images = []
     
     try:
-        # Load intro video
-        print("Loading intro video...")
-        intro_clip = VideoFileClip(intro_path)
-        clips.append(intro_clip)
+        # Determine video size based on format preference
+        # TikTok/MercadoLibre format: 1080x1920 (9:16 vertical)
+        # YouTube format: 1920x1080 (16:9 horizontal)
+        if video_format == 'tiktok':
+            default_video_size = (1080, 1920)
+        else:
+            default_video_size = (1920, 1080)
         
-        # Get video size from intro
-        video_size = (intro_clip.w, intro_clip.h)
+        video_size = default_video_size
+        
+        # Load intro video if provided
+        if intro_path:
+            print("Loading intro video...")
+            intro_clip = VideoFileClip(intro_path)
+            
+            # Resize intro to match target format if needed
+            if (intro_clip.w, intro_clip.h) != video_size:
+                print(f"Resizing intro from {intro_clip.w}x{intro_clip.h} to {video_size[0]}x{video_size[1]}...")
+                intro_clip = intro_clip.resize(video_size)
+            
+            clips.append(intro_clip)
+            # Use intro video size if available
+            video_size = (intro_clip.w, intro_clip.h)
+        else:
+            print("No intro video provided, using product carousel only...")
         
         # Process each product image
         print(f"Processing {len(product_images)} product images...")
@@ -1481,6 +1501,18 @@ def generate_video(intro_path, product_images, background_image_path, output_pat
             
             clips.append(transition_clip)
         
+        # Load outro video if provided
+        if outro_path:
+            print("Loading outro video...")
+            outro_clip = VideoFileClip(outro_path)
+            
+            # Resize outro to match video format if needed
+            if (outro_clip.w, outro_clip.h) != video_size:
+                print(f"Resizing outro from {outro_clip.w}x{outro_clip.h} to {video_size[0]}x{video_size[1]}...")
+                outro_clip = outro_clip.resize(video_size)
+            
+            clips.append(outro_clip)
+        
         # Concatenate all clips
         print("Concatenating clips...")
         final_clip = concatenate_videoclips(clips, method="compose")
@@ -1491,7 +1523,7 @@ def generate_video(intro_path, product_images, background_image_path, output_pat
             output_path,
             codec='libx264',
             audio_codec='aac',
-            fps=24,
+            fps=30,  # Increased to 30fps for smoother playback (TikTok standard)
             preset='medium',
             threads=4
         )
@@ -1532,39 +1564,27 @@ def index():
 
 @app.route('/generate_video', methods=['POST'])
 def generate_video_route():
-    """Handle video generation request."""
+    """Handle video generation request with optional intro/outro."""
     uploaded_files = []
     
     try:
-        # Check if files are present
-        if 'intro_video' not in request.files:
-            flash('No se encontró el video de introducción', 'error')
-            return redirect(url_for('index'))
-        
+        # Check if product images are present (required)
         if 'product_images' not in request.files:
             flash('No se encontraron imágenes de productos', 'error')
             return redirect(url_for('index'))
         
-        intro_video = request.files['intro_video']
+        # Get files - intro and outro are now optional
+        intro_video = request.files.get('intro_video')
+        outro_video = request.files.get('outro_video')
         product_images = request.files.getlist('product_images')
         custom_background = request.files.get('custom_background')
         
-        # Get checkbox value for background removal
+        # Get form parameters
         remove_bg = request.form.get('remove_background') == 'yes'
-        
-        # Get transition type selection
         transition_type = request.form.get('transition_type', 'carousel')
+        video_format = request.form.get('video_format', 'tiktok')
         
-        # Validate intro video
-        if intro_video.filename == '':
-            flash('No se seleccionó un video de introducción', 'error')
-            return redirect(url_for('index'))
-        
-        if not allowed_file(intro_video.filename, 'video'):
-            flash('Formato de video no válido. Use MP4, MOV o AVI', 'error')
-            return redirect(url_for('index'))
-        
-        # Validate product images
+        # Validate product images (required)
         if not product_images or product_images[0].filename == '':
             flash('No se seleccionaron imágenes de productos', 'error')
             return redirect(url_for('index'))
@@ -1578,12 +1598,31 @@ def generate_video_route():
                 flash(f'Formato de imagen no válido: {img.filename}. Use PNG, JPG o JPEG', 'error')
                 return redirect(url_for('index'))
         
-        # Save intro video
-        print("Guardando video de introducción...")
-        intro_filename = f"{uuid.uuid4().hex}_{secure_filename(intro_video.filename)}"
-        intro_path = os.path.join(app.config['UPLOAD_FOLDER'], intro_filename)
-        intro_video.save(intro_path)
-        uploaded_files.append(intro_path)
+        # Save intro video if provided (optional)
+        intro_path = None
+        if intro_video and intro_video.filename != '':
+            if not allowed_file(intro_video.filename, 'video'):
+                flash('Formato de video de intro no válido. Use MP4, MOV o AVI', 'error')
+                return redirect(url_for('index'))
+            
+            print("Guardando video de introducción...")
+            intro_filename = f"{uuid.uuid4().hex}_{secure_filename(intro_video.filename)}"
+            intro_path = os.path.join(app.config['UPLOAD_FOLDER'], intro_filename)
+            intro_video.save(intro_path)
+            uploaded_files.append(intro_path)
+        
+        # Save outro video if provided (optional)
+        outro_path = None
+        if outro_video and outro_video.filename != '':
+            if not allowed_file(outro_video.filename, 'video'):
+                flash('Formato de video de outro no válido. Use MP4, MOV o AVI', 'error')
+                return redirect(url_for('index'))
+            
+            print("Guardando video de cierre...")
+            outro_filename = f"{uuid.uuid4().hex}_{secure_filename(outro_video.filename)}"
+            outro_path = os.path.join(app.config['UPLOAD_FOLDER'], outro_filename)
+            outro_video.save(outro_path)
+            uploaded_files.append(outro_path)
         
         # Save product images
         print("Guardando imágenes de productos...")
@@ -1611,10 +1650,12 @@ def generate_video_route():
         output_filename = f"video_{uuid.uuid4().hex}.mp4"
         output_path = os.path.join(app.config['VIDEOS_FOLDER'], output_filename)
         
-        # Generate video
+        # Generate video with optional intro/outro
         print("Iniciando generación de video...")
         flash('Procesando video... Esto puede tomar varios minutos.', 'info')
-        generate_video(intro_path, product_image_paths, background_path, output_path, remove_bg, transition_type)
+        generate_video(intro_path, product_image_paths, background_path, output_path, 
+                      outro_path=outro_path, remove_bg=remove_bg, transition_type=transition_type, 
+                      video_format=video_format)
         
         # Clean up uploaded files
         print("Limpiando archivos temporales...")

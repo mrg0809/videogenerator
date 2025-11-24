@@ -44,25 +44,36 @@
             </div>
         </div>
 
-        <!-- Carousel Form (Original Feature) -->
+        <!-- Carousel Form (Updated with Optional Intro/Outro) -->
         <div id="carousel-tab" class="tab-content active">
             <div class="form-container">
                 <h2 class="form-title">📽️ Generador de Video con Carrusel</h2>
-                <p class="form-description">Crea un video combinando intro y múltiples productos con efectos de transición</p>
+                <p class="form-description">Crea un video con productos y efectos de transición. Intro y outro son opcionales - enfocado en formato TikTok/MercadoLibre (9:16)</p>
                 
                 <form method="POST" action="{{ url_for('generate_video_route') }}" enctype="multipart/form-data" id="uploadForm">
                 
                 <div class="form-group">
+                    <label for="video_format">
+                        <span class="label-icon">📱</span>
+                        Formato de Video
+                    </label>
+                    <select id="video_format" name="video_format" class="form-select">
+                        <option value="tiktok" selected>TikTok/MercadoLibre (1080x1920 - Vertical 9:16)</option>
+                        <option value="youtube">YouTube (1920x1080 - Horizontal 16:9)</option>
+                    </select>
+                    <small>Formato vertical optimizado para TikTok y MercadoLibre (recomendado)</small>
+                </div>
+
+                <div class="form-group">
                     <label for="intro_video">
                         <span class="label-icon">🎥</span>
-                        Video de Introducción (requerido)
+                        Video de Introducción (opcional)
                     </label>
                     <input type="file" 
                            id="intro_video" 
                            name="intro_video" 
-                           accept="video/mp4,video/quicktime,video/x-msvideo" 
-                           required>
-                    <small>Formatos: MP4, MOV, AVI</small>
+                           accept="video/mp4,video/quicktime,video/x-msvideo">
+                    <small>Formatos: MP4, MOV, AVI | Opcional - omitir para empezar directamente con productos</small>
                 </div>
 
                 <div class="form-group">
@@ -77,6 +88,18 @@
                            multiple 
                            required>
                     <small>Formatos: PNG, JPG, JPEG | Máximo 5 imágenes</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="outro_video">
+                        <span class="label-icon">🎬</span>
+                        Video de Cierre/Outro (opcional)
+                    </label>
+                    <input type="file" 
+                           id="outro_video" 
+                           name="outro_video" 
+                           accept="video/mp4,video/quicktime,video/x-msvideo">
+                    <small>Formatos: MP4, MOV, AVI | Opcional - agregar al final después de los productos</small>
                 </div>
 
                 <div class="form-group">
