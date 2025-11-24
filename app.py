@@ -1439,10 +1439,11 @@ def generate_video(intro_path, product_images, background_image_path, output_pat
         # Determine video size based on format preference
         # TikTok/MercadoLibre format: 1080x1920 (9:16 vertical)
         # YouTube format: 1920x1080 (16:9 horizontal)
-        if video_format == 'tiktok':
-            default_video_size = (1080, 1920)
-        else:
+        if video_format == 'youtube':
             default_video_size = (1920, 1080)
+        else:
+            # Default to TikTok format for any other value (including 'tiktok')
+            default_video_size = (1080, 1920)
         
         video_size = default_video_size
         
@@ -1457,8 +1458,6 @@ def generate_video(intro_path, product_images, background_image_path, output_pat
                 intro_clip = intro_clip.resize(video_size)
             
             clips.append(intro_clip)
-            # Use intro video size if available
-            video_size = (intro_clip.w, intro_clip.h)
         else:
             print("No intro video provided, using product carousel only...")
         
@@ -1512,6 +1511,10 @@ def generate_video(intro_path, product_images, background_image_path, output_pat
                 outro_clip = outro_clip.resize(video_size)
             
             clips.append(outro_clip)
+        
+        # Ensure we have at least one clip to concatenate
+        if not clips:
+            raise ValueError("No clips to concatenate. At least one product image must be processed successfully.")
         
         # Concatenate all clips
         print("Concatenating clips...")
