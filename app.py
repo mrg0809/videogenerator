@@ -130,8 +130,10 @@ def add_audio_with_fade(video_clip, audio_path, fade_duration=1.0):
             audio_clip = audio_clip.subclip(0, video_duration)
         
         # Apply fade in and fade out effects
-        # Ensure fade duration doesn't exceed half the video duration
-        safe_fade_duration = min(fade_duration, video_duration / 4)
+        # Ensure fade duration doesn't exceed 1/4 of the video duration
+        # to leave enough time for the main audio content
+        MAX_FADE_RATIO = 4  # Fade can be at most 1/4 of video duration
+        safe_fade_duration = min(fade_duration, video_duration / MAX_FADE_RATIO)
         
         # Apply fade in at the start
         audio_clip = audio_clip.audio_fadein(safe_fade_duration)
@@ -1684,14 +1686,25 @@ def generate_multi_image_3d_spin_video(image_paths_dict, output_path, frames_per
         
         # Write video file
         print("Rendering final video...")
-        video_clip.write_videofile(
-            output_path,
-            codec='libx264',
-            audio_codec='aac' if audio_path else None,
-            fps=fps,
-            preset='medium',
-            threads=4
-        )
+        # Use different write options based on whether audio is present
+        if audio_path:
+            video_clip.write_videofile(
+                output_path,
+                codec='libx264',
+                audio_codec='aac',
+                fps=fps,
+                preset='medium',
+                threads=4
+            )
+        else:
+            video_clip.write_videofile(
+                output_path,
+                codec='libx264',
+                audio=False,
+                fps=fps,
+                preset='medium',
+                threads=4
+            )
         
         # Clean up
         video_clip.close()
