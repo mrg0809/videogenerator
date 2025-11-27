@@ -44,25 +44,36 @@
             </div>
         </div>
 
-        <!-- Carousel Form (Original Feature) -->
+        <!-- Carousel Form (Updated with Optional Intro/Outro) -->
         <div id="carousel-tab" class="tab-content active">
             <div class="form-container">
                 <h2 class="form-title">📽️ Generador de Video con Carrusel</h2>
-                <p class="form-description">Crea un video combinando intro y múltiples productos con efectos de transición</p>
+                <p class="form-description">Crea un video con productos y efectos de transición. Intro y outro son opcionales - enfocado en formato TikTok/MercadoLibre (9:16)</p>
                 
                 <form method="POST" action="{{ url_for('generate_video_route') }}" enctype="multipart/form-data" id="uploadForm">
                 
                 <div class="form-group">
+                    <label for="video_format">
+                        <span class="label-icon">📱</span>
+                        Formato de Video
+                    </label>
+                    <select id="video_format" name="video_format" class="form-select">
+                        <option value="tiktok" selected>TikTok/MercadoLibre (1080x1920 - Vertical 9:16)</option>
+                        <option value="youtube">YouTube (1920x1080 - Horizontal 16:9)</option>
+                    </select>
+                    <small>Formato vertical optimizado para TikTok y MercadoLibre (recomendado)</small>
+                </div>
+
+                <div class="form-group">
                     <label for="intro_video">
                         <span class="label-icon">🎥</span>
-                        Video de Introducción (requerido)
+                        Video de Introducción (opcional)
                     </label>
                     <input type="file" 
                            id="intro_video" 
                            name="intro_video" 
-                           accept="video/mp4,video/quicktime,video/x-msvideo" 
-                           required>
-                    <small>Formatos: MP4, MOV, AVI</small>
+                           accept="video/mp4,video/quicktime,video/x-msvideo">
+                    <small>Formatos: MP4, MOV, AVI | Opcional - omitir para empezar directamente con productos</small>
                 </div>
 
                 <div class="form-group">
@@ -80,15 +91,27 @@
                 </div>
 
                 <div class="form-group">
+                    <label for="outro_video">
+                        <span class="label-icon">🎬</span>
+                        Video de Cierre/Outro (opcional)
+                    </label>
+                    <input type="file" 
+                           id="outro_video" 
+                           name="outro_video" 
+                           accept="video/mp4,video/quicktime,video/x-msvideo">
+                    <small>Formatos: MP4, MOV, AVI | Opcional - agregar al final después de los productos</small>
+                </div>
+
+                <div class="form-group">
                     <label for="custom_background">
                         <span class="label-icon">🎨</span>
-                        Fondo Personalizado (opcional)
+                        Fondo Personalizado (opcional - imagen o video)
                     </label>
                     <input type="file" 
                            id="custom_background" 
                            name="custom_background" 
-                           accept="image/png,image/jpeg,image/jpg">
-                    <small>Formatos: PNG, JPG, JPEG | Si no se proporciona, se usará un fondo blanco</small>
+                           accept="image/png,image/jpeg,image/jpg,video/mp4,video/quicktime,video/x-msvideo">
+                    <small>Formatos: PNG, JPG, JPEG, MP4, MOV, AVI | Puedes usar un video como fondo animado</small>
                 </div>
 
                 <div class="form-group checkbox-group">
@@ -134,10 +157,22 @@
         <div id="product-tab" class="tab-content">
             <div class="form-container">
                 <h2 class="form-title">🎨 Generador de Video Animado de Producto</h2>
-                <p class="form-description">Crea un video animado de un solo producto con efectos de movimiento y rotación</p>
+                <p class="form-description">Crea un video animado de un solo producto con efectos de movimiento y rotación - enfocado en formato TikTok/MercadoLibre (9:16)</p>
                 
                 <form method="POST" action="{{ url_for('generate_product_video_route') }}" enctype="multipart/form-data" id="productForm">
                     
+                    <div class="form-group">
+                        <label for="product_video_format">
+                            <span class="label-icon">📱</span>
+                            Formato de Video
+                        </label>
+                        <select id="product_video_format" name="video_format" class="form-select">
+                            <option value="tiktok" selected>TikTok/MercadoLibre (1080x1920 - Vertical 9:16)</option>
+                            <option value="youtube">YouTube (1920x1080 - Horizontal 16:9)</option>
+                        </select>
+                        <small>Formato vertical optimizado para TikTok y MercadoLibre (recomendado)</small>
+                    </div>
+
                     <div class="form-group">
                         <label for="product_image">
                             <span class="label-icon">📸</span>
@@ -154,13 +189,25 @@
                     <div class="form-group">
                         <label for="product_background">
                             <span class="label-icon">🎨</span>
-                            Fondo Personalizado (opcional)
+                            Fondo Personalizado (opcional - imagen o video)
                         </label>
                         <input type="file" 
                                id="product_background" 
                                name="product_background" 
-                               accept="image/png,image/jpeg,image/jpg">
-                        <small>Formatos: PNG, JPG, JPEG | Si no se proporciona, se usará un fondo blanco</small>
+                               accept="image/png,image/jpeg,image/jpg,video/mp4,video/quicktime,video/x-msvideo">
+                        <small>Formatos: PNG, JPG, JPEG, MP4, MOV, AVI | Si no se proporciona, se usará un fondo blanco</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="product_outro_video">
+                            <span class="label-icon">🎬</span>
+                            Video de Cierre/Outro (opcional)
+                        </label>
+                        <input type="file" 
+                               id="product_outro_video" 
+                               name="outro_video" 
+                               accept="video/mp4,video/quicktime,video/x-msvideo">
+                        <small>Formatos: MP4, MOV, AVI | Opcional - agregar al final después de la animación</small>
                     </div>
 
                     <div class="form-group">
@@ -188,7 +235,7 @@
                             <option value="8">8 segundos</option>
                             <option value="10">10 segundos</option>
                         </select>
-                        <small>Duración total del video animado</small>
+                        <small>Duración total del video animado (sin contar el outro)</small>
                     </div>
 
                     <div class="button-group">

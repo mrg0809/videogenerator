@@ -3,7 +3,7 @@ import uuid
 import io
 from flask import Flask, request, render_template, redirect, url_for, send_from_directory, flash
 from werkzeug.utils import secure_filename
-from moviepy.editor import VideoFileClip, ImageClip, CompositeVideoClip, concatenate_videoclips, ColorClip
+from moviepy.editor import VideoFileClip, ImageClip, CompositeVideoClip, concatenate_videoclips, ColorClip, VideoClip
 from PIL import Image, ImageDraw
 from rembg import remove
 import numpy as np
@@ -49,6 +49,22 @@ def allowed_file(filename, file_type):
         return ext in ALLOWED_IMAGE_EXTENSIONS
     
     return False
+
+
+def is_video_file(filename):
+    """
+    Check if a file is a video based on its extension.
+    
+    Args:
+        filename: Name of the file
+    
+    Returns:
+        bool: True if the file is a video, False otherwise
+    """
+    if '.' not in filename:
+        return False
+    ext = filename.rsplit('.', 1)[1].lower()
+    return ext in ALLOWED_VIDEO_EXTENSIONS
 
 
 def remove_background_only(product_image_path, output_path, target_size=(1920, 1080)):
@@ -494,6 +510,314 @@ def create_filmstrip_transition_clip(image_path, duration=3, video_size=(1920, 1
         raise
 
 
+def load_and_prepare_video_background(background_video_path, duration, video_size):
+    """
+    Load a video file and prepare it as a background clip.
+    Loops or trims the video to match the target duration.
+    
+    Args:
+        background_video_path: Path to the background video
+        duration: Target duration in seconds
+        video_size: Target size (width, height)
+    
+    Returns:
+        VideoClip: Prepared background video clip
+    """
+    # Load background video
+    bg_video = VideoFileClip(background_video_path)
+    
+    # Remove audio from background video to avoid conflicts
+    bg_video = bg_video.without_audio()
+    
+    # Resize background video to match target size
+    bg_video = bg_video.resize(video_size)
+    
+    # Loop or trim the background video to match duration
+    if bg_video.duration < duration:
+        # Use MoviePy's loop functionality for memory efficiency
+        bg_video = bg_video.loop(duration=duration)
+    else:
+        bg_video = bg_video.subclip(0, duration)
+    
+    return bg_video
+
+
+def composite_pil_images(background_array, product_pil, position=(0, 0), scale=1.0):
+    """
+    Composite a PIL RGBA image onto a numpy array background using PIL's proven alpha blending.
+    
+    Args:
+        background_array: Numpy array of the background frame (RGB)
+        product_pil: PIL Image with RGBA (has transparency)
+        position: (x, y) offset for positioning the product
+        scale: Scale factor for the product
+    
+    Returns:
+        Numpy array of the composited frame (RGB)
+    """
+    # Convert background to PIL
+    bg_pil = Image.fromarray(background_array.astype('uint8'), 'RGB')
+    
+    # Scale product if needed
+    if scale != 1.0:
+        new_size = (int(product_pil.width * scale), int(product_pil.height * scale))
+        product_scaled = product_pil.resize(new_size, Image.Resampling.LANCZOS)
+    else:
+        product_scaled = product_pil
+    
+    # Calculate paste position (position is offset from default centered position)
+    paste_x = int(position[0])
+    paste_y = int(position[1])
+    
+    # Create a copy of background to paste onto
+    result = bg_pil.copy()
+    
+    # Use PIL's paste with alpha mask for proper transparency
+    # This is the SAME method used in remove_background_and_composite which works!
+    result.paste(product_scaled, (paste_x, paste_y), product_scaled)
+    
+    # Convert back to numpy array
+    return np.array(result)
+
+
+def create_carousel_clip_with_video_bg(product_image_path, background_video_path, duration=3, video_size=(1920, 1080)):
+    """
+    Create a video clip with carousel effect and a video background.
+    Uses PIL's proven alpha blending for reliable transparency compositing.
+    
+    Args:
+        product_image_path: Path to the product image (already processed with transparent background at target size)
+        background_video_path: Path to the background video
+        duration: Duration of the clip in seconds
+        video_size: Size of the video (width, height)
+    
+    Returns:
+        VideoClip: The created video clip with video background and carousel effect
+    """
+    try:
+        # Load and prepare background video
+        bg_video = load_and_prepare_video_background(background_video_path, duration, video_size)
+        
+        # Load product image with transparency (already scaled and centered from remove_background_only)
+        product_pil = Image.open(product_image_path).convert("RGBA")
+        
+        # Store fps from background video
+        fps = bg_video.fps if bg_video.fps else 30
+        
+        # Define position function with carousel effect (slide in/out animation)
+        def get_position(t):
+            progress = t / duration
+            
+            if progress < 0.35:
+                # Slide in from right
+                ease = progress / 0.35
+                ease = 1 - (1 - ease) ** 4
+                x = video_size[0] * 1.5 * (1 - ease)
+            elif progress > 0.65:
+                # Slide out to left
+                ease = (progress - 0.65) / 0.35
+                ease = ease ** 4
+                x = -video_size[0] * 1.5 * ease
+            else:
+                x = 0
+            
+            return (x, 0)
+        
+        # Define scale function for zoom effect
+        def get_scale(t):
+            progress = t / duration
+            
+            if progress < 0.35:
+                ease = progress / 0.35
+                ease = 1 - (1 - ease) ** 4
+                scale = 0.8 + (0.25 * ease)
+            elif progress > 0.65:
+                ease = (progress - 0.65) / 0.35
+                ease = ease ** 4
+                scale = 1.05 - (0.25 * ease)
+            else:
+                scale = 1.05
+            
+            return scale
+        
+        # Create a make_frame function that composites using PIL
+        def make_frame(t):
+            # Get background frame
+            bg_frame = bg_video.get_frame(t)
+            
+            # Get current position and scale
+            pos = get_position(t)
+            scale = get_scale(t)
+            
+            # Use PIL compositing (proven to work)
+            return composite_pil_images(bg_frame, product_pil, pos, scale)
+        
+        # Create VideoClip with our custom make_frame function
+        final_clip = VideoClip(make_frame, duration=duration)
+        final_clip = final_clip.set_fps(fps)
+        
+        return final_clip
+    
+    except Exception as e:
+        print(f"Error creating carousel clip with video background: {e}")
+        raise
+
+
+def create_card_clip_with_video_bg(product_image_path, background_video_path, duration=3, video_size=(1920, 1080)):
+    """
+    Create a video clip with card transition effect and a video background.
+    Uses PIL's proven alpha blending for reliable transparency compositing.
+    
+    Args:
+        product_image_path: Path to the product image (already processed with transparent background at target size)
+        background_video_path: Path to the background video
+        duration: Duration of the clip in seconds
+        video_size: Size of the video (width, height)
+    
+    Returns:
+        VideoClip: The created video clip with video background and card effect
+    """
+    try:
+        # Load and prepare background video
+        bg_video = load_and_prepare_video_background(background_video_path, duration, video_size)
+        
+        # Load product image with transparency
+        product_pil = Image.open(product_image_path).convert("RGBA")
+        
+        # Store fps from background video
+        fps = bg_video.fps if bg_video.fps else 30
+        
+        # Card transition position function
+        def get_position(t):
+            progress = t / duration
+            
+            if progress < 0.35:
+                ease = progress / 0.35
+                ease = 1 - (1 - ease) ** 4
+                x = -video_size[0] * 0.8 * (1 - ease)
+                y = video_size[1] * 0.4 * (1 - ease)
+            elif progress > 0.65:
+                ease = (progress - 0.65) / 0.35
+                ease = ease ** 4
+                x = video_size[0] * 0.8 * ease
+                y = -video_size[1] * 0.4 * ease
+            else:
+                x = 0
+                y = 0
+            
+            return (x, y)
+        
+        # Card scale function
+        def get_scale(t):
+            progress = t / duration
+            
+            if progress < 0.35:
+                ease = progress / 0.35
+                ease = 1 - (1 - ease) ** 4
+                scale = 0.7 + (0.4 * ease)
+            elif progress > 0.65:
+                ease = (progress - 0.65) / 0.35
+                ease = ease ** 4
+                scale = 1.1 - (0.4 * ease)
+            else:
+                scale = 1.1
+            
+            return scale
+        
+        # Create a make_frame function that composites using PIL
+        def make_frame(t):
+            bg_frame = bg_video.get_frame(t)
+            pos = get_position(t)
+            scale = get_scale(t)
+            return composite_pil_images(bg_frame, product_pil, pos, scale)
+        
+        # Create VideoClip with our custom make_frame function
+        final_clip = VideoClip(make_frame, duration=duration)
+        final_clip = final_clip.set_fps(fps)
+        
+        return final_clip
+    
+    except Exception as e:
+        print(f"Error creating card clip with video background: {e}")
+        raise
+
+
+def create_filmstrip_clip_with_video_bg(product_image_path, background_video_path, duration=3, video_size=(1920, 1080)):
+    """
+    Create a video clip with filmstrip transition effect and a video background.
+    Uses PIL's proven alpha blending for reliable transparency compositing.
+    
+    Args:
+        product_image_path: Path to the product image (already processed with transparent background at target size)
+        background_video_path: Path to the background video
+        duration: Duration of the clip in seconds
+        video_size: Size of the video (width, height)
+    
+    Returns:
+        VideoClip: The created video clip with video background and filmstrip effect
+    """
+    try:
+        # Load and prepare background video
+        bg_video = load_and_prepare_video_background(background_video_path, duration, video_size)
+        
+        # Load product image with transparency
+        product_pil = Image.open(product_image_path).convert("RGBA")
+        
+        # Store fps from background video
+        fps = bg_video.fps if bg_video.fps else 30
+        
+        # Filmstrip position function (vertical scrolling)
+        def get_position(t):
+            progress = t / duration
+            
+            if progress < 0.4:
+                ease = progress / 0.4
+                ease = 1 - (1 - ease) ** 4
+                y = video_size[1] * 1.3 * (1 - ease)
+            elif progress > 0.6:
+                ease = (progress - 0.6) / 0.4
+                ease = ease ** 4
+                y = -video_size[1] * 1.3 * ease
+            else:
+                y = 0
+            
+            return (0, y)
+        
+        # Filmstrip scale function
+        def get_scale(t):
+            progress = t / duration
+            
+            if progress < 0.4:
+                ease = progress / 0.4
+                ease = 1 - (1 - ease) ** 3
+                scale = 0.75 + (0.33 * ease)
+            elif progress > 0.6:
+                ease = (progress - 0.6) / 0.4
+                ease = ease ** 3
+                scale = 1.08 - (0.33 * ease)
+            else:
+                scale = 1.08
+            
+            return scale
+        
+        # Create a make_frame function that composites using PIL
+        def make_frame(t):
+            bg_frame = bg_video.get_frame(t)
+            pos = get_position(t)
+            scale = get_scale(t)
+            return composite_pil_images(bg_frame, product_pil, pos, scale)
+        
+        # Create VideoClip with our custom make_frame function
+        final_clip = VideoClip(make_frame, duration=duration)
+        final_clip = final_clip.set_fps(fps)
+        
+        return final_clip
+    
+    except Exception as e:
+        print(f"Error creating filmstrip clip with video background: {e}")
+        raise
+
+
 def create_product_animation_clip(image_path, duration=5, video_size=(1920, 1080), animation_type='rotate', bg_color=(255, 255, 255)):
     """
     Create an animated video clip of a single product with rotation or movement.
@@ -612,28 +936,158 @@ def create_product_animation_clip(image_path, duration=5, video_size=(1920, 1080
         raise
 
 
+def create_product_animation_clip_with_video_bg(product_image_path, background_video_path, 
+                                                 duration=5, video_size=(1920, 1080), 
+                                                 animation_type='rotate'):
+    """
+    Create an animated video clip of a product with a video background.
+    Uses PIL-based compositing for reliable transparency handling.
+    
+    Args:
+        product_image_path: Path to the processed product image (PNG with transparency)
+        background_video_path: Path to the background video
+        duration: Duration of the animation in seconds
+        video_size: Size of the video (width, height)
+        animation_type: Type of animation ('rotate', 'zoom', 'float', 'spin_zoom')
+    
+    Returns:
+        VideoClip: The created animated video clip with video background
+    """
+    try:
+        # Load and prepare background video
+        bg_video = load_and_prepare_video_background(background_video_path, duration, video_size)
+        fps = bg_video.fps if bg_video.fps else 30
+        
+        # Load product image with transparency
+        product_pil = Image.open(product_image_path).convert("RGBA")
+        product_width, product_height = product_pil.size
+        
+        # Define animation functions based on type
+        if animation_type == 'rotate':
+            def get_position(t):
+                return (0, 0)  # Centered since image is already centered on canvas
+            
+            def get_scale(t):
+                return 1.0
+            
+            def get_rotation(t):
+                return (t / duration) * 360
+                
+        elif animation_type == 'spin_zoom':
+            def get_position(t):
+                return (0, 0)
+            
+            def get_scale(t):
+                progress = t / duration
+                if progress < 0.5:
+                    return 0.7 + (0.6 * (progress / 0.5))
+                else:
+                    return 1.3 - (0.6 * ((progress - 0.5) / 0.5))
+            
+            def get_rotation(t):
+                return (t / duration) * 720  # Two rotations
+                
+        elif animation_type == 'zoom':
+            def get_position(t):
+                return (0, 0)
+            
+            def get_scale(t):
+                progress = t / duration
+                if progress < 0.5:
+                    return 0.8 + (0.4 * (progress / 0.5))
+                else:
+                    return 1.2 - (0.4 * ((progress - 0.5) / 0.5))
+            
+            def get_rotation(t):
+                return 0
+                
+        elif animation_type == 'float':
+            def get_position(t):
+                progress = t / duration
+                y_offset = np.sin(progress * 4 * np.pi) * (video_size[1] * 0.1)
+                return (0, y_offset)
+            
+            def get_scale(t):
+                progress = t / duration
+                return 1.0 + (np.sin(progress * 4 * np.pi) * 0.1)
+            
+            def get_rotation(t):
+                return 0
+        else:
+            # Default to no transformation
+            def get_position(t):
+                return (0, 0)
+            def get_scale(t):
+                return 1.0
+            def get_rotation(t):
+                return 0
+        
+        # Create a make_frame function that composites using PIL
+        def make_frame(t):
+            # Get background frame
+            bg_frame = bg_video.get_frame(t)
+            
+            # Get current transformations
+            pos = get_position(t)
+            scale = get_scale(t)
+            rotation = get_rotation(t)
+            
+            # Apply transformations to product
+            transformed_product = product_pil.copy()
+            
+            # Apply rotation if needed
+            if rotation != 0:
+                transformed_product = transformed_product.rotate(
+                    -rotation,  # Negative for clockwise rotation
+                    expand=False,
+                    resample=Image.Resampling.BICUBIC
+                )
+            
+            # Apply scale if needed (resize around center)
+            if scale != 1.0:
+                new_size = (int(product_width * scale), int(product_height * scale))
+                transformed_product = transformed_product.resize(new_size, Image.Resampling.LANCZOS)
+            
+            # Use PIL compositing
+            return composite_pil_images(bg_frame, transformed_product, pos, 1.0)
+        
+        # Create VideoClip with our custom make_frame function
+        final_clip = VideoClip(make_frame, duration=duration)
+        final_clip = final_clip.set_fps(fps)
+        
+        return final_clip
+    
+    except Exception as e:
+        print(f"Error creating product animation clip with video background: {e}")
+        raise
+
+
 def generate_product_video(product_image_path, background_image_path, output_path, 
-                          duration=5, animation_type='rotate', video_size=(1920, 1080)):
+                          duration=5, animation_type='rotate', video_size=(1920, 1080),
+                          background_is_video=False, outro_path=None):
     """
     Generate an animated video from a single product image.
     
     Args:
         product_image_path: Path to the product image
-        background_image_path: Path to custom background image (can be None)
+        background_image_path: Path to custom background image or video (can be None)
         output_path: Path to save the output video
         duration: Duration of the animation in seconds (default: 5)
         animation_type: Type of animation ('rotate', 'zoom', 'float', 'spin_zoom')
         video_size: Size of the video (width, height)
+        background_is_video: Whether the background is a video file
+        outro_path: Path to outro video (optional)
     
     Returns:
         str: Path to the generated video
     """
     processed_image_path = None
+    clips = []
     
     try:
-        # Determine background color
-        if background_image_path and os.path.exists(background_image_path):
-            # Get average color from custom background
+        # Determine background color (only used for image backgrounds or default)
+        if background_image_path and os.path.exists(background_image_path) and not background_is_video:
+            # Get average color from custom background image
             bg_img = Image.open(background_image_path)
             bg_img_resized = bg_img.resize((100, 100))  # Resize for faster processing
             bg_array = np.array(bg_img_resized)
@@ -659,34 +1113,78 @@ def generate_product_video(product_image_path, background_image_path, output_pat
                 video_size
             )
         else:
-            # For other animations, composite onto background
-            processed_image_path = os.path.join(
-                UPLOAD_FOLDER, 
-                f"processed_{uuid.uuid4().hex}.jpg"
-            )
-            
-            # Remove background and composite
-            print("Removing background and compositing image...")
-            remove_background_and_composite(
-                product_image_path, 
-                background_image_path, 
-                processed_image_path,
-                video_size
-            )
+            # For other animations, composite onto background (only if not video background)
+            if background_is_video:
+                # For video backgrounds, still need transparency
+                processed_image_path = os.path.join(
+                    UPLOAD_FOLDER, 
+                    f"processed_{uuid.uuid4().hex}.png"
+                )
+                print("Removing background (keeping transparency for video background)...")
+                remove_background_only(
+                    product_image_path,
+                    processed_image_path,
+                    video_size
+                )
+            else:
+                processed_image_path = os.path.join(
+                    UPLOAD_FOLDER, 
+                    f"processed_{uuid.uuid4().hex}.jpg"
+                )
+                # Remove background and composite
+                print("Removing background and compositing image...")
+                remove_background_and_composite(
+                    product_image_path, 
+                    background_image_path, 
+                    processed_image_path,
+                    video_size
+                )
         
         # Create animated clip
-        print(f"Creating animated video with {animation_type} effect...")
-        animated_clip = create_product_animation_clip(
-            processed_image_path, 
-            duration=duration, 
-            video_size=video_size,
-            animation_type=animation_type,
-            bg_color=bg_color
-        )
+        if background_is_video and background_image_path:
+            # Use video background with PIL-based compositing
+            print(f"Creating animated video with {animation_type} effect over video background...")
+            animated_clip = create_product_animation_clip_with_video_bg(
+                processed_image_path, 
+                background_image_path,
+                duration=duration, 
+                video_size=video_size,
+                animation_type=animation_type
+            )
+        else:
+            # Use image background or default
+            print(f"Creating animated video with {animation_type} effect...")
+            animated_clip = create_product_animation_clip(
+                processed_image_path, 
+                duration=duration, 
+                video_size=video_size,
+                animation_type=animation_type,
+                bg_color=bg_color
+            )
+        
+        clips.append(animated_clip)
+        
+        # Add outro if provided
+        if outro_path and os.path.exists(outro_path):
+            print("Processing outro video...")
+            outro_clip = VideoFileClip(outro_path)
+            
+            # Resize outro to match video size if needed
+            if outro_clip.size != video_size:
+                outro_clip = outro_clip.resize(video_size)
+            
+            clips.append(outro_clip)
+        
+        # Concatenate all clips
+        if len(clips) > 1:
+            print("Concatenating animation and outro...")
+            final_clip = concatenate_videoclips(clips, method="compose")
+        else:
+            final_clip = clips[0]
         
         # Write final video
         print("Rendering final video...")
-        animated_clip.write_videofile(
+        final_clip.write_videofile(
             output_path,
             codec='libx264',
             audio_codec='aac',
@@ -695,8 +1193,11 @@ def generate_product_video(product_image_path, background_image_path, output_pat
             threads=4
         )
         
-        # Close clip to release resources
-        animated_clip.close()
+        # Close clips to release resources
+        for clip in clips:
+            clip.close()
+        if len(clips) > 1:
+            final_clip.close()
         
         print("Product video generation complete!")
         return output_path
@@ -1415,17 +1916,20 @@ def generate_3d_spin_video(image_path, output_path, frames_per_rotation=60,
         raise
 
 
-def generate_video(intro_path, product_images, background_image_path, output_path, remove_bg=True, transition_type='carousel'):
+def generate_video(intro_path, product_images, background_path, output_path, outro_path=None, remove_bg=True, transition_type='carousel', video_format='tiktok', background_is_video=False):
     """
-    Generate the final video with intro and product images using selected transition effect.
+    Generate the final video with optional intro/outro and product images using selected transition effect.
     
     Args:
-        intro_path: Path to intro video
+        intro_path: Path to intro video (can be None for no intro)
         product_images: List of paths to product images
-        background_image_path: Path to custom background image (can be None)
+        background_path: Path to custom background image or video (can be None)
         output_path: Path to save the output video
+        outro_path: Path to outro video (can be None for no outro)
         remove_bg: Whether to remove background from images (default: True)
         transition_type: Type of transition ('carousel', 'card', or 'filmstrip')
+        video_format: Video format ('tiktok' for 1080x1920, 'youtube' for 1920x1080)
+        background_is_video: Whether the background is a video file (default: False)
     
     Returns:
         str: Path to the generated video
@@ -1434,52 +1938,133 @@ def generate_video(intro_path, product_images, background_image_path, output_pat
     processed_images = []
     
     try:
-        # Load intro video
-        print("Loading intro video...")
-        intro_clip = VideoFileClip(intro_path)
-        clips.append(intro_clip)
+        # Determine video size based on format preference
+        # TikTok/MercadoLibre format: 1080x1920 (9:16 vertical)
+        # YouTube format: 1920x1080 (16:9 horizontal)
+        if video_format == 'youtube':
+            default_video_size = (1920, 1080)
+        else:
+            # Default to TikTok format for any other value (including 'tiktok')
+            default_video_size = (1080, 1920)
         
-        # Get video size from intro
-        video_size = (intro_clip.w, intro_clip.h)
+        video_size = default_video_size
+        
+        # Load intro video if provided
+        if intro_path:
+            print("Loading intro video...")
+            intro_clip = VideoFileClip(intro_path)
+            
+            # Resize intro to match target format if needed
+            if (intro_clip.w, intro_clip.h) != video_size:
+                print(f"Resizing intro from {intro_clip.w}x{intro_clip.h} to {video_size[0]}x{video_size[1]}...")
+                intro_clip = intro_clip.resize(video_size)
+            
+            clips.append(intro_clip)
+        else:
+            print("No intro video provided, using product carousel only...")
         
         # Process each product image
         print(f"Processing {len(product_images)} product images...")
-        for i, product_image in enumerate(product_images):
-            print(f"Processing image {i+1}/{len(product_images)}...")
-            
-            # Create processed image path
-            processed_image_path = os.path.join(
-                UPLOAD_FOLDER, 
-                f"processed_{uuid.uuid4().hex}.jpg"
-            )
-            processed_images.append(processed_image_path)
-            
-            # Remove background and composite if requested
-            if remove_bg:
-                remove_background_and_composite(
-                    product_image, 
-                    background_image_path, 
-                    processed_image_path,
-                    video_size
+        
+        # If background is video, we need to use different processing
+        if background_is_video and background_path:
+            print("Using video background for products...")
+            for i, product_image in enumerate(product_images):
+                print(f"Processing image {i+1}/{len(product_images)} with video background...")
+                
+                # For video backgrounds, we need to remove background and keep as PNG with transparency
+                processed_image_path = os.path.join(
+                    UPLOAD_FOLDER, 
+                    f"processed_{uuid.uuid4().hex}.png"
                 )
-            else:
-                # Just resize and optionally composite on background without removing bg
-                composite_without_removal(
-                    product_image,
-                    background_image_path,
-                    processed_image_path,
-                    video_size
+                processed_images.append(processed_image_path)
+                
+                # Remove background only (keep transparency for compositing)
+                if remove_bg:
+                    remove_background_only(
+                        product_image, 
+                        processed_image_path,
+                        video_size
+                    )
+                else:
+                    # Just copy the product image resized
+                    img = Image.open(product_image).convert("RGBA")
+                    product_width, product_height = img.size
+                    bg_width, bg_height = video_size
+                    scale_factor = min((bg_width * 0.8) / product_width, (bg_height * 0.8) / product_height)
+                    new_width = int(product_width * scale_factor)
+                    new_height = int(product_height * scale_factor)
+                    img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+                    # Create transparent canvas and center product
+                    canvas = Image.new('RGBA', video_size, (0, 0, 0, 0))
+                    x = (bg_width - new_width) // 2
+                    y = (bg_height - new_height) // 2
+                    canvas.paste(img, (x, y), img if img.mode == 'RGBA' else None)
+                    canvas.save(processed_image_path, 'PNG')
+                
+                # Create clip with video background and selected transition effect
+                if transition_type == 'card':
+                    transition_clip = create_card_clip_with_video_bg(processed_image_path, background_path, duration=3, video_size=video_size)
+                elif transition_type == 'filmstrip':
+                    transition_clip = create_filmstrip_clip_with_video_bg(processed_image_path, background_path, duration=3, video_size=video_size)
+                else:  # default to carousel
+                    transition_clip = create_carousel_clip_with_video_bg(processed_image_path, background_path, duration=3, video_size=video_size)
+                
+                clips.append(transition_clip)
+        else:
+            # Standard processing with image background (or no background)
+            for i, product_image in enumerate(product_images):
+                print(f"Processing image {i+1}/{len(product_images)}...")
+                
+                # Create processed image path
+                processed_image_path = os.path.join(
+                    UPLOAD_FOLDER, 
+                    f"processed_{uuid.uuid4().hex}.jpg"
                 )
+                processed_images.append(processed_image_path)
+                
+                # Remove background and composite if requested
+                if remove_bg:
+                    remove_background_and_composite(
+                        product_image, 
+                        background_path, 
+                        processed_image_path,
+                        video_size
+                    )
+                else:
+                    # Just resize and optionally composite on background without removing bg
+                    composite_without_removal(
+                        product_image,
+                        background_path,
+                        processed_image_path,
+                        video_size
+                    )
+                
+                # Create clip with selected transition effect
+                if transition_type == 'card':
+                    transition_clip = create_card_transition_clip(processed_image_path, duration=3, video_size=video_size)
+                elif transition_type == 'filmstrip':
+                    transition_clip = create_filmstrip_transition_clip(processed_image_path, duration=3, video_size=video_size)
+                else:  # default to carousel
+                    transition_clip = create_carousel_clip(processed_image_path, duration=3, video_size=video_size)
+                
+                clips.append(transition_clip)
+        
+        # Load outro video if provided
+        if outro_path:
+            print("Loading outro video...")
+            outro_clip = VideoFileClip(outro_path)
             
-            # Create clip with selected transition effect
-            if transition_type == 'card':
-                transition_clip = create_card_transition_clip(processed_image_path, duration=3, video_size=video_size)
-            elif transition_type == 'filmstrip':
-                transition_clip = create_filmstrip_transition_clip(processed_image_path, duration=3, video_size=video_size)
-            else:  # default to carousel
-                transition_clip = create_carousel_clip(processed_image_path, duration=3, video_size=video_size)
+            # Resize outro to match video format if needed
+            if (outro_clip.w, outro_clip.h) != video_size:
+                print(f"Resizing outro from {outro_clip.w}x{outro_clip.h} to {video_size[0]}x{video_size[1]}...")
+                outro_clip = outro_clip.resize(video_size)
             
-            clips.append(transition_clip)
+            clips.append(outro_clip)
+        
+        # Ensure we have at least one clip to concatenate
+        if not clips:
+            raise ValueError("No clips to concatenate. At least one product image must be processed successfully.")
         
         # Concatenate all clips
         print("Concatenating clips...")
@@ -1491,7 +2076,7 @@ def generate_video(intro_path, product_images, background_image_path, output_pat
             output_path,
             codec='libx264',
             audio_codec='aac',
-            fps=24,
+            fps=30,  # Increased to 30fps for smoother playback (TikTok standard)
             preset='medium',
             threads=4
         )
@@ -1532,39 +2117,27 @@ def index():
 
 @app.route('/generate_video', methods=['POST'])
 def generate_video_route():
-    """Handle video generation request."""
+    """Handle video generation request with optional intro/outro."""
     uploaded_files = []
     
     try:
-        # Check if files are present
-        if 'intro_video' not in request.files:
-            flash('No se encontró el video de introducción', 'error')
-            return redirect(url_for('index'))
-        
+        # Check if product images are present (required)
         if 'product_images' not in request.files:
             flash('No se encontraron imágenes de productos', 'error')
             return redirect(url_for('index'))
         
-        intro_video = request.files['intro_video']
+        # Get files - intro and outro are now optional
+        intro_video = request.files.get('intro_video')
+        outro_video = request.files.get('outro_video')
         product_images = request.files.getlist('product_images')
         custom_background = request.files.get('custom_background')
         
-        # Get checkbox value for background removal
+        # Get form parameters
         remove_bg = request.form.get('remove_background') == 'yes'
-        
-        # Get transition type selection
         transition_type = request.form.get('transition_type', 'carousel')
+        video_format = request.form.get('video_format', 'tiktok')
         
-        # Validate intro video
-        if intro_video.filename == '':
-            flash('No se seleccionó un video de introducción', 'error')
-            return redirect(url_for('index'))
-        
-        if not allowed_file(intro_video.filename, 'video'):
-            flash('Formato de video no válido. Use MP4, MOV o AVI', 'error')
-            return redirect(url_for('index'))
-        
-        # Validate product images
+        # Validate product images (required)
         if not product_images or product_images[0].filename == '':
             flash('No se seleccionaron imágenes de productos', 'error')
             return redirect(url_for('index'))
@@ -1578,12 +2151,31 @@ def generate_video_route():
                 flash(f'Formato de imagen no válido: {img.filename}. Use PNG, JPG o JPEG', 'error')
                 return redirect(url_for('index'))
         
-        # Save intro video
-        print("Guardando video de introducción...")
-        intro_filename = f"{uuid.uuid4().hex}_{secure_filename(intro_video.filename)}"
-        intro_path = os.path.join(app.config['UPLOAD_FOLDER'], intro_filename)
-        intro_video.save(intro_path)
-        uploaded_files.append(intro_path)
+        # Save intro video if provided (optional)
+        intro_path = None
+        if intro_video and intro_video.filename != '':
+            if not allowed_file(intro_video.filename, 'video'):
+                flash('Formato de video de intro no válido. Use MP4, MOV o AVI', 'error')
+                return redirect(url_for('index'))
+            
+            print("Guardando video de introducción...")
+            intro_filename = f"{uuid.uuid4().hex}_{secure_filename(intro_video.filename)}"
+            intro_path = os.path.join(app.config['UPLOAD_FOLDER'], intro_filename)
+            intro_video.save(intro_path)
+            uploaded_files.append(intro_path)
+        
+        # Save outro video if provided (optional)
+        outro_path = None
+        if outro_video and outro_video.filename != '':
+            if not allowed_file(outro_video.filename, 'video'):
+                flash('Formato de video de outro no válido. Use MP4, MOV o AVI', 'error')
+                return redirect(url_for('index'))
+            
+            print("Guardando video de cierre...")
+            outro_filename = f"{uuid.uuid4().hex}_{secure_filename(outro_video.filename)}"
+            outro_path = os.path.join(app.config['UPLOAD_FOLDER'], outro_filename)
+            outro_video.save(outro_path)
+            uploaded_files.append(outro_path)
         
         # Save product images
         print("Guardando imágenes de productos...")
@@ -1595,26 +2187,40 @@ def generate_video_route():
             uploaded_files.append(img_path)
             product_image_paths.append(img_path)
         
-        # Save custom background if provided
+        # Save custom background if provided (can be image or video)
         background_path = None
+        background_is_video = False
         if custom_background and custom_background.filename != '':
-            if allowed_file(custom_background.filename, 'image'):
+            # Check if background is a video or image
+            if is_video_file(custom_background.filename):
+                if allowed_file(custom_background.filename, 'video'):
+                    print("Guardando video de fondo personalizado...")
+                    bg_filename = f"{uuid.uuid4().hex}_{secure_filename(custom_background.filename)}"
+                    background_path = os.path.join(app.config['UPLOAD_FOLDER'], bg_filename)
+                    custom_background.save(background_path)
+                    uploaded_files.append(background_path)
+                    background_is_video = True
+                else:
+                    flash('Formato de video de fondo no válido. Use MP4, MOV o AVI', 'warning')
+            elif allowed_file(custom_background.filename, 'image'):
                 print("Guardando imagen de fondo personalizado...")
                 bg_filename = f"{uuid.uuid4().hex}_{secure_filename(custom_background.filename)}"
                 background_path = os.path.join(app.config['UPLOAD_FOLDER'], bg_filename)
                 custom_background.save(background_path)
                 uploaded_files.append(background_path)
             else:
-                flash('Formato de imagen de fondo no válido', 'warning')
+                flash('Formato de fondo no válido. Use PNG, JPG, JPEG, MP4, MOV o AVI', 'warning')
         
         # Generate output filename
         output_filename = f"video_{uuid.uuid4().hex}.mp4"
         output_path = os.path.join(app.config['VIDEOS_FOLDER'], output_filename)
         
-        # Generate video
+        # Generate video with optional intro/outro
         print("Iniciando generación de video...")
         flash('Procesando video... Esto puede tomar varios minutos.', 'info')
-        generate_video(intro_path, product_image_paths, background_path, output_path, remove_bg, transition_type)
+        generate_video(intro_path, product_image_paths, background_path, output_path, 
+                      outro_path=outro_path, remove_bg=remove_bg, transition_type=transition_type, 
+                      video_format=video_format, background_is_video=background_is_video)
         
         # Clean up uploaded files
         print("Limpiando archivos temporales...")
@@ -1656,10 +2262,18 @@ def generate_product_video_route():
         
         product_image = request.files['product_image']
         custom_background = request.files.get('product_background')
+        outro_video = request.files.get('outro_video')
         
-        # Get animation type and duration
+        # Get animation type, duration, and video format
         animation_type = request.form.get('animation_type', 'rotate')
         duration = int(request.form.get('duration', 5))
+        video_format = request.form.get('video_format', 'tiktok')
+        
+        # Determine video size based on format
+        if video_format == 'tiktok':
+            video_size = (1080, 1920)  # Vertical 9:16
+        else:
+            video_size = (1920, 1080)  # Horizontal 16:9
         
         # Validate product image
         if product_image.filename == '':
@@ -1677,17 +2291,37 @@ def generate_product_video_route():
         product_image.save(product_path)
         uploaded_files.append(product_path)
         
-        # Save custom background if provided
+        # Save custom background if provided (can be image or video)
         background_path = None
+        background_is_video = False
         if custom_background and custom_background.filename != '':
-            if allowed_file(custom_background.filename, 'image'):
+            bg_filename = f"{uuid.uuid4().hex}_{secure_filename(custom_background.filename)}"
+            background_path = os.path.join(app.config['UPLOAD_FOLDER'], bg_filename)
+            
+            if is_video_file(custom_background.filename):
+                print("Guardando video de fondo personalizado...")
+                background_is_video = True
+                custom_background.save(background_path)
+                uploaded_files.append(background_path)
+            elif allowed_file(custom_background.filename, 'image'):
                 print("Guardando imagen de fondo personalizado...")
-                bg_filename = f"{uuid.uuid4().hex}_{secure_filename(custom_background.filename)}"
-                background_path = os.path.join(app.config['UPLOAD_FOLDER'], bg_filename)
                 custom_background.save(background_path)
                 uploaded_files.append(background_path)
             else:
-                flash('Formato de imagen de fondo no válido', 'warning')
+                flash('Formato de fondo no válido. Use PNG, JPG, JPEG, MP4, MOV o AVI', 'warning')
+                background_path = None
+        
+        # Save outro video if provided
+        outro_path = None
+        if outro_video and outro_video.filename != '':
+            if allowed_file(outro_video.filename, 'video'):
+                print("Guardando video outro...")
+                outro_filename = f"{uuid.uuid4().hex}_{secure_filename(outro_video.filename)}"
+                outro_path = os.path.join(app.config['UPLOAD_FOLDER'], outro_filename)
+                outro_video.save(outro_path)
+                uploaded_files.append(outro_path)
+            else:
+                flash('Formato de video outro no válido. Use MP4, MOV o AVI', 'warning')
         
         # Generate output filename
         output_filename = f"product_video_{uuid.uuid4().hex}.mp4"
@@ -1701,7 +2335,10 @@ def generate_product_video_route():
             background_path, 
             output_path,
             duration=duration,
-            animation_type=animation_type
+            animation_type=animation_type,
+            video_size=video_size,
+            background_is_video=background_is_video,
+            outro_path=outro_path
         )
         
         # Clean up uploaded files

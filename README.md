@@ -5,9 +5,11 @@ Aplicación web Flask que genera videos profesionales con tres modos principales
 ## ✨ Características
 
 ### 🎞️ Modo Carrusel de Productos
-- **Video de Introducción**: Añade un video al inicio del video final
+- **Formato TikTok/MercadoLibre**: Optimizado para formato vertical 9:16 (1080x1920), ideal para redes sociales y plataformas de comercio
+- **Intro y Outro Opcionales**: Añade videos al inicio y/o final según tus necesidades - ambos son opcionales
 - **3 Tipos de Transiciones**: Elige entre Carrusel (deslizamiento horizontal), Tarjetas (fade + slide lateral), o Cinta de Película (efecto vintage con scroll vertical)
 - **Múltiples Productos**: Combina hasta 5 imágenes de productos con transiciones suaves
+- **Formatos de Video**: Compatible con TikTok (1080x1920) y YouTube (1920x1080)
 
 ### 🔄 Modo Animación de Producto
 - **Animación de Producto Individual**: Crea videos animados de un solo producto
@@ -116,17 +118,24 @@ El servidor se iniciará en `http://localhost:5000`
 
 #### 🎞️ Modo Carrusel de Productos
 
-3. **Sube los archivos requeridos**:
-   - **Video de Introducción** (obligatorio): Un archivo de video (MP4, MOV, o AVI)
+3. **Selecciona el formato de video**:
+   - **TikTok/MercadoLibre** (recomendado): 1080x1920 vertical (9:16) - optimizado para redes sociales y plataformas de ecommerce
+   - **YouTube**: 1920x1080 horizontal (16:9) - formato tradicional
+
+4. **Sube los archivos**:
+   - **Video de Introducción** (opcional): Un archivo de video (MP4, MOV, o AVI) - se agregará al inicio
    - **Imágenes de Productos** (obligatorio): Entre 1 y 5 imágenes (PNG, JPG, o JPEG)
+   - **Video de Cierre/Outro** (opcional): Un archivo de video (MP4, MOV, o AVI) - se agregará al final
    - **Fondo Personalizado** (opcional): Una imagen para usar como fondo (PNG, JPG, o JPEG)
 
-4. **Selecciona el tipo de transición** entre imágenes:
+5. **Selecciona el tipo de transición** entre imágenes:
    - **Carrusel**: Deslizamiento horizontal suave con escalado
    - **Tarjetas**: Fade out/in con deslizamiento lateral
    - **Cinta de Película**: Efecto negativo vintage con scroll vertical
 
-5. **Haz clic en "Generar Video con Carrusel"**
+6. **Haz clic en "Generar Video con Carrusel"**
+
+**Nota**: Puedes crear videos solo con productos (sin intro ni outro), con solo intro, con solo outro, o con ambos.
 
 #### 🔄 Modo Animación de Producto
 
@@ -268,15 +277,35 @@ output_bytes = remove(input_image,
                      alpha_matting_background_threshold=10)   # Ajustar entre 0-255
 ```
 
+## 📱 Requisitos para TikTok y MercadoLibre
+
+### Formato TikTok/MercadoLibre
+
+La aplicación está optimizada para generar videos en formato vertical (9:16) que cumplen con los requisitos de:
+
+- **TikTok**: 1080x1920 píxeles, formato vertical 9:16
+- **MercadoLibre**: Recomiendan formato vertical para mejor visualización móvil
+  - Duración: 3-60 segundos recomendados
+  - Formato: MP4 (H.264)
+  - Sin espacios negros (videos optimizados para llenar toda la pantalla)
+
+**Características implementadas**:
+- ✅ Formato vertical 1080x1920 (9:16)
+- ✅ 30 FPS (estándar de TikTok)
+- ✅ Productos centrados y escalados para aprovechar todo el espacio
+- ✅ Sin barras negras ni espacios sin usar
+- ✅ Codec H.264 compatible con todas las plataformas
+
 ## 🧪 Prueba Manual
 
 ### Archivos de Prueba Recomendados
 
 Para probar la aplicación, necesitarás:
 
-1. **Video de Intro**: Un video corto (5-10 segundos) en formato MP4
+1. **Video de Intro** (opcional): Un video corto (3-10 segundos) en formato MP4
 2. **Imágenes de Productos**: 2-3 imágenes de productos con fondos sólidos o complejos
-3. **Imagen de Fondo**: Una imagen con buena resolución (1920x1080 recomendado)
+3. **Video de Outro** (opcional): Un video corto (3-5 segundos) en formato MP4
+4. **Imagen de Fondo** (opcional): Una imagen con buena resolución (1080x1920 para formato TikTok)
 
 ### Pasos de Prueba
 
