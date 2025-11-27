@@ -544,7 +544,7 @@ def create_carousel_clip_with_video_bg(product_image_path, background_video_path
     Create a video clip with carousel effect and a video background.
     
     Args:
-        product_image_path: Path to the product image (with transparent background)
+        product_image_path: Path to the product image (already processed with transparent background at target size)
         background_video_path: Path to the background video
         duration: Duration of the clip in seconds
         video_size: Size of the video (width, height)
@@ -556,27 +556,17 @@ def create_carousel_clip_with_video_bg(product_image_path, background_video_path
         # Load and prepare background video using helper function
         bg_video = load_and_prepare_video_background(background_video_path, duration, video_size)
         
-        # Load product image with transparency
+        # Load product image with transparency (already scaled and centered from remove_background_only)
         product_img = Image.open(product_image_path).convert("RGBA")
-        
-        # Scale product to fit within video size while maintaining aspect ratio
-        product_width, product_height = product_img.size
-        bg_width, bg_height = video_size
-        
-        # Calculate scaling factor (use 80% of background size max)
-        scale_factor = min((bg_width * 0.8) / product_width, (bg_height * 0.8) / product_height)
-        new_width = int(product_width * scale_factor)
-        new_height = int(product_height * scale_factor)
-        
-        product_img = product_img.resize((new_width, new_height), Image.Resampling.LANCZOS)
         
         # Convert to numpy array for MoviePy
         product_array = np.array(product_img)
         
         # Create product clip with the same duration
+        # The image is already at video_size with the product centered
         product_clip = ImageClip(product_array, duration=duration, ismask=False)
         
-        # Define position function with carousel effect
+        # Define position function with carousel effect (slide in/out animation)
         def position_func(t):
             progress = t / duration
             
@@ -593,24 +583,22 @@ def create_carousel_clip_with_video_bg(product_image_path, background_video_path
             else:
                 x = 0
             
-            # Center vertically
-            y = (video_size[1] - new_height) // 2
-            return (x + (video_size[0] - new_width) // 2, y)
+            return (x, 0)  # Y is 0 since image is already centered on the canvas
         
-        # Define resize function
+        # Define resize function for zoom effect
         def resize_func(t):
             progress = t / duration
             
             if progress < 0.35:
                 ease = progress / 0.35
                 ease = 1 - (1 - ease) ** 4
-                scale = 0.6 + (0.45 * ease)
+                scale = 0.8 + (0.25 * ease)  # Start at 80%, end at 105%
             elif progress > 0.65:
                 ease = (progress - 0.65) / 0.35
                 ease = ease ** 4
-                scale = 1.05 - (0.45 * ease)
+                scale = 1.05 - (0.25 * ease)  # 105% to 80%
             else:
-                scale = 1.05
+                scale = 1.05  # Hold at 105%
             
             return scale
         
@@ -633,7 +621,7 @@ def create_card_clip_with_video_bg(product_image_path, background_video_path, du
     Create a video clip with card transition effect and a video background.
     
     Args:
-        product_image_path: Path to the product image (with transparent background)
+        product_image_path: Path to the product image (already processed with transparent background at target size)
         background_video_path: Path to the background video
         duration: Duration of the clip in seconds
         video_size: Size of the video (width, height)
@@ -645,19 +633,11 @@ def create_card_clip_with_video_bg(product_image_path, background_video_path, du
         # Load and prepare background video using helper function
         bg_video = load_and_prepare_video_background(background_video_path, duration, video_size)
         
-        # Load product image with transparency
+        # Load product image with transparency (already scaled and centered from remove_background_only)
         product_img = Image.open(product_image_path).convert("RGBA")
-        
-        # Scale product
-        product_width, product_height = product_img.size
-        bg_width, bg_height = video_size
-        scale_factor = min((bg_width * 0.8) / product_width, (bg_height * 0.8) / product_height)
-        new_width = int(product_width * scale_factor)
-        new_height = int(product_height * scale_factor)
-        
-        product_img = product_img.resize((new_width, new_height), Image.Resampling.LANCZOS)
         product_array = np.array(product_img)
         
+        # Create product clip - image is already at video_size with product centered
         product_clip = ImageClip(product_array, duration=duration, ismask=False)
         
         # Card transition position function
@@ -678,9 +658,7 @@ def create_card_clip_with_video_bg(product_image_path, background_video_path, du
                 x = 0
                 y = 0
             
-            center_x = (video_size[0] - new_width) // 2
-            center_y = (video_size[1] - new_height) // 2
-            return (center_x + x, center_y + y)
+            return (x, y)  # Position relative to origin since image is already centered on the canvas
         
         # Card resize function
         def resize_func(t):
@@ -689,13 +667,13 @@ def create_card_clip_with_video_bg(product_image_path, background_video_path, du
             if progress < 0.35:
                 ease = progress / 0.35
                 ease = 1 - (1 - ease) ** 4
-                scale = 0.5 + (0.6 * ease)
+                scale = 0.7 + (0.4 * ease)  # Start at 70%, end at 110%
             elif progress > 0.65:
                 ease = (progress - 0.65) / 0.35
                 ease = ease ** 4
-                scale = 1.1 - (0.6 * ease)
+                scale = 1.1 - (0.4 * ease)  # 110% to 70%
             else:
-                scale = 1.1
+                scale = 1.1  # Hold at 110%
             
             return scale
         
@@ -716,7 +694,7 @@ def create_filmstrip_clip_with_video_bg(product_image_path, background_video_pat
     Create a video clip with filmstrip transition effect and a video background.
     
     Args:
-        product_image_path: Path to the product image (with transparent background)
+        product_image_path: Path to the product image (already processed with transparent background at target size)
         background_video_path: Path to the background video
         duration: Duration of the clip in seconds
         video_size: Size of the video (width, height)
@@ -728,19 +706,11 @@ def create_filmstrip_clip_with_video_bg(product_image_path, background_video_pat
         # Load and prepare background video using helper function
         bg_video = load_and_prepare_video_background(background_video_path, duration, video_size)
         
-        # Load product image with transparency
+        # Load product image with transparency (already scaled and centered from remove_background_only)
         product_img = Image.open(product_image_path).convert("RGBA")
-        
-        # Scale product
-        product_width, product_height = product_img.size
-        bg_width, bg_height = video_size
-        scale_factor = min((bg_width * 0.8) / product_width, (bg_height * 0.8) / product_height)
-        new_width = int(product_width * scale_factor)
-        new_height = int(product_height * scale_factor)
-        
-        product_img = product_img.resize((new_width, new_height), Image.Resampling.LANCZOS)
         product_array = np.array(product_img)
         
+        # Create product clip - image is already at video_size with product centered
         product_clip = ImageClip(product_array, duration=duration, ismask=False)
         
         # Filmstrip position function (vertical scrolling)
@@ -758,9 +728,7 @@ def create_filmstrip_clip_with_video_bg(product_image_path, background_video_pat
             else:
                 y = 0
             
-            center_x = (video_size[0] - new_width) // 2
-            center_y = (video_size[1] - new_height) // 2
-            return (center_x, center_y + y)
+            return (0, y)  # X is 0 since image is already centered on the canvas
         
         # Filmstrip resize function
         def resize_func(t):
@@ -769,13 +737,13 @@ def create_filmstrip_clip_with_video_bg(product_image_path, background_video_pat
             if progress < 0.4:
                 ease = progress / 0.4
                 ease = 1 - (1 - ease) ** 3
-                scale = 0.65 + (0.43 * ease)
+                scale = 0.75 + (0.33 * ease)  # Start at 75%, end at 108%
             elif progress > 0.6:
                 ease = (progress - 0.6) / 0.4
                 ease = ease ** 3
-                scale = 1.08 - (0.43 * ease)
+                scale = 1.08 - (0.33 * ease)  # 108% to 75%
             else:
-                scale = 1.08
+                scale = 1.08  # Hold at 108%
             
             return scale
         
