@@ -1,9 +1,9 @@
 import os
 import uuid
 import io
-from flask import Flask, request, render_template, redirect, url_for, send_from_directory, flash
+from flask import Flask, request, render_template, redirect, url_for, send_from_directory, flash, jsonify
 from werkzeug.utils import secure_filename
-from moviepy.editor import VideoFileClip, ImageClip, CompositeVideoClip, concatenate_videoclips, ColorClip, VideoClip
+from moviepy.editor import VideoFileClip, ImageClip, CompositeVideoClip, concatenate_videoclips, ColorClip, VideoClip, AudioFileClip
 from PIL import Image, ImageDraw
 from rembg import remove
 import numpy as np
@@ -15,16 +15,20 @@ app.secret_key = os.environ.get('SECRET_KEY', 'dev_secret_key_change_in_producti
 # Configuration
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
 VIDEOS_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'videos')
+MUSIC_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'music')
 ALLOWED_VIDEO_EXTENSIONS = {'mp4', 'mov', 'avi'}
 ALLOWED_IMAGE_EXTENSIONS = {'png', 'jpg', 'jpeg'}
+ALLOWED_AUDIO_EXTENSIONS = {'mp3', 'wav', 'ogg', 'm4a', 'aac'}
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['VIDEOS_FOLDER'] = VIDEOS_FOLDER
+app.config['MUSIC_FOLDER'] = MUSIC_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500MB max file size
 
 # Ensure directories exist
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(VIDEOS_FOLDER, exist_ok=True)
+os.makedirs(MUSIC_FOLDER, exist_ok=True)
 
 
 def allowed_file(filename, file_type):
@@ -65,6 +69,85 @@ def is_video_file(filename):
         return False
     ext = filename.rsplit('.', 1)[1].lower()
     return ext in ALLOWED_VIDEO_EXTENSIONS
+
+
+def is_audio_file(filename):
+    """
+    Check if a file is an audio file based on its extension.
+    
+    Args:
+        filename: Name of the file
+    
+    Returns:
+        bool: True if the file is an audio file, False otherwise
+    """
+    if '.' not in filename:
+        return False
+    ext = filename.rsplit('.', 1)[1].lower()
+    return ext in ALLOWED_AUDIO_EXTENSIONS
+
+
+def get_available_music():
+    """
+    Get list of available music files from the music folder.
+    
+    Returns:
+        list: List of music filenames
+    """
+    music_files = []
+    if os.path.exists(MUSIC_FOLDER):
+        for f in os.listdir(MUSIC_FOLDER):
+            if is_audio_file(f):
+                music_files.append(f)
+    return sorted(music_files)
+
+
+def add_audio_with_fade(video_clip, audio_path, fade_duration=1.0):
+    """
+    Add audio to a video clip with fade in and fade out effects.
+    
+    Args:
+        video_clip: The video clip to add audio to
+        audio_path: Path to the audio file
+        fade_duration: Duration of fade in/out in seconds (default: 1.0)
+    
+    Returns:
+        VideoClip: Video clip with audio added
+    """
+    try:
+        # Load audio clip
+        audio_clip = AudioFileClip(audio_path)
+        
+        # Get video duration
+        video_duration = video_clip.duration
+        
+        # Trim or loop audio to match video duration
+        if audio_clip.duration < video_duration:
+            # Loop audio if it's shorter than video
+            audio_clip = audio_clip.audio_loop(duration=video_duration)
+        elif audio_clip.duration > video_duration:
+            # Trim audio if it's longer than video
+            audio_clip = audio_clip.subclip(0, video_duration)
+        
+        # Apply fade in and fade out effects
+        # Ensure fade duration doesn't exceed half the video duration
+        safe_fade_duration = min(fade_duration, video_duration / 4)
+        
+        # Apply fade in at the start
+        audio_clip = audio_clip.audio_fadein(safe_fade_duration)
+        
+        # Apply fade out at the end
+        audio_clip = audio_clip.audio_fadeout(safe_fade_duration)
+        
+        # Set audio to video
+        video_with_audio = video_clip.set_audio(audio_clip)
+        
+        return video_with_audio
+    
+    except Exception as e:
+        print(f"Error adding audio: {e}")
+        # Return original video without audio if there's an error
+        return video_clip
 
 
 def remove_background_only(product_image_path, output_path, target_size=(1920, 1080)):
@@ -1064,7 +1147,7 @@ def create_product_animation_clip_with_video_bg(product_image_path, background_v
 
 def generate_product_video(product_image_path, background_image_path, output_path, 
                           duration=5, animation_type='rotate', video_size=(1920, 1080),
-                          background_is_video=False, outro_path=None):
+                          background_is_video=False, outro_path=None, audio_path=None, fade_duration=1.0):
     """
     Generate an animated video from a single product image.
     
@@ -1077,6 +1160,8 @@ def generate_product_video(product_image_path, background_image_path, output_pat
         video_size: Size of the video (width, height)
         background_is_video: Whether the background is a video file
         outro_path: Path to outro video (optional)
+        audio_path: Path to audio file to add to the video (can be None for no audio)
+        fade_duration: Duration of audio fade in/out in seconds (default: 1.0)
     
     Returns:
         str: Path to the generated video
@@ -1181,6 +1266,11 @@ def generate_product_video(product_image_path, background_image_path, output_pat
             final_clip = concatenate_videoclips(clips, method="compose")
         else:
             final_clip = clips[0]
+        
+        # Add audio with fade in/out if provided
+        if audio_path and os.path.exists(audio_path):
+            print(f"Adding audio with fade in/out ({fade_duration}s)...")
+            final_clip = add_audio_with_fade(final_clip, audio_path, fade_duration)
         
         # Write final video
         print("Rendering final video...")
@@ -1443,7 +1533,8 @@ def calculate_orbital_perspective_transform(width, height, camera_angle_degrees,
 
 def generate_multi_image_3d_spin_video(image_paths_dict, output_path, frames_per_rotation=60,
                                        perspective_strength=0.3, duration=None,
-                                       video_size=(1080, 1920), bg_color=(255, 255, 255)):
+                                       video_size=(1080, 1920), bg_color=(255, 255, 255),
+                                       audio_path=None, fade_duration=1.0):
     """
     Generate a 3D-like spin/rotation video from multiple product images showing different angles.
     
@@ -1455,6 +1546,8 @@ def generate_multi_image_3d_spin_video(image_paths_dict, output_path, frames_per
         duration: Duration of video in seconds (default: calculated from frames_per_rotation)
         video_size: Output video size (width, height)
         bg_color: Background color as RGB tuple
+        audio_path: Path to audio file to add to the video (can be None for no audio)
+        fade_duration: Duration of audio fade in/out in seconds (default: 1.0)
     
     Returns:
         str: Path to the generated video
@@ -1584,12 +1677,17 @@ def generate_multi_image_3d_spin_video(image_paths_dict, output_path, frames_per
         video_clip = ImageSequenceClip(frames, fps=fps)
         video_clip = video_clip.set_duration(duration)
         
+        # Add audio with fade in/out if provided
+        if audio_path and os.path.exists(audio_path):
+            print(f"Adding audio with fade in/out ({fade_duration}s)...")
+            video_clip = add_audio_with_fade(video_clip, audio_path, fade_duration)
+        
         # Write video file
         print("Rendering final video...")
         video_clip.write_videofile(
             output_path,
             codec='libx264',
-            audio=False,
+            audio_codec='aac' if audio_path else None,
             fps=fps,
             preset='medium',
             threads=4
@@ -1916,7 +2014,7 @@ def generate_3d_spin_video(image_path, output_path, frames_per_rotation=60,
         raise
 
 
-def generate_video(intro_path, product_images, background_path, output_path, outro_path=None, remove_bg=True, transition_type='carousel', video_format='tiktok', background_is_video=False):
+def generate_video(intro_path, product_images, background_path, output_path, outro_path=None, remove_bg=True, transition_type='carousel', video_format='tiktok', background_is_video=False, audio_path=None, fade_duration=1.0):
     """
     Generate the final video with optional intro/outro and product images using selected transition effect.
     
@@ -1930,6 +2028,8 @@ def generate_video(intro_path, product_images, background_path, output_path, out
         transition_type: Type of transition ('carousel', 'card', or 'filmstrip')
         video_format: Video format ('tiktok' for 1080x1920, 'youtube' for 1920x1080)
         background_is_video: Whether the background is a video file (default: False)
+        audio_path: Path to audio file to add to the video (can be None for no audio)
+        fade_duration: Duration of audio fade in/out in seconds (default: 1.0)
     
     Returns:
         str: Path to the generated video
@@ -2070,6 +2170,11 @@ def generate_video(intro_path, product_images, background_path, output_path, out
         print("Concatenating clips...")
         final_clip = concatenate_videoclips(clips, method="compose")
         
+        # Add audio with fade in/out if provided
+        if audio_path and os.path.exists(audio_path):
+            print(f"Adding audio with fade in/out ({fade_duration}s)...")
+            final_clip = add_audio_with_fade(final_clip, audio_path, fade_duration)
+        
         # Write final video
         print("Rendering final video...")
         final_clip.write_videofile(
@@ -2112,7 +2217,15 @@ def generate_video(intro_path, product_images, background_path, output_path, out
 @app.route('/')
 def index():
     """Render the main page."""
-    return render_template('index.html')
+    music_files = get_available_music()
+    return render_template('index.html', music_files=music_files)
+
+
+@app.route('/api/music')
+def get_music_list():
+    """API endpoint to get list of available music files."""
+    music_files = get_available_music()
+    return jsonify(music_files)
 
 
 @app.route('/generate_video', methods=['POST'])
@@ -2136,6 +2249,8 @@ def generate_video_route():
         remove_bg = request.form.get('remove_background') == 'yes'
         transition_type = request.form.get('transition_type', 'carousel')
         video_format = request.form.get('video_format', 'tiktok')
+        selected_music = request.form.get('music_track', '')
+        fade_duration = float(request.form.get('fade_duration', 1.0))
         
         # Validate product images (required)
         if not product_images or product_images[0].filename == '':
@@ -2215,12 +2330,23 @@ def generate_video_route():
         output_filename = f"video_{uuid.uuid4().hex}.mp4"
         output_path = os.path.join(app.config['VIDEOS_FOLDER'], output_filename)
         
+        # Get audio path if music is selected
+        audio_path = None
+        if selected_music and selected_music != '':
+            audio_path = os.path.join(MUSIC_FOLDER, selected_music)
+            if not os.path.exists(audio_path):
+                flash(f'El archivo de música seleccionado no existe: {selected_music}', 'warning')
+                audio_path = None
+            else:
+                print(f"Usando pista de audio: {selected_music}")
+        
         # Generate video with optional intro/outro
         print("Iniciando generación de video...")
         flash('Procesando video... Esto puede tomar varios minutos.', 'info')
         generate_video(intro_path, product_image_paths, background_path, output_path, 
                       outro_path=outro_path, remove_bg=remove_bg, transition_type=transition_type, 
-                      video_format=video_format, background_is_video=background_is_video)
+                      video_format=video_format, background_is_video=background_is_video,
+                      audio_path=audio_path, fade_duration=fade_duration)
         
         # Clean up uploaded files
         print("Limpiando archivos temporales...")
@@ -2232,7 +2358,8 @@ def generate_video_route():
                 print(f"Warning: Could not delete file {file_path}: {e}")
         
         flash('¡Video generado exitosamente!', 'success')
-        return render_template('index.html', video_filename=output_filename)
+        music_files = get_available_music()
+        return render_template('index.html', video_filename=output_filename, music_files=music_files)
     
     except Exception as e:
         print(f"Error en generate_video_route: {e}")
@@ -2268,6 +2395,8 @@ def generate_product_video_route():
         animation_type = request.form.get('animation_type', 'rotate')
         duration = int(request.form.get('duration', 5))
         video_format = request.form.get('video_format', 'tiktok')
+        selected_music = request.form.get('music_track', '')
+        fade_duration = float(request.form.get('fade_duration', 1.0))
         
         # Determine video size based on format
         if video_format == 'tiktok':
@@ -2327,6 +2456,16 @@ def generate_product_video_route():
         output_filename = f"product_video_{uuid.uuid4().hex}.mp4"
         output_path = os.path.join(app.config['VIDEOS_FOLDER'], output_filename)
         
+        # Get audio path if music is selected
+        audio_path = None
+        if selected_music and selected_music != '':
+            audio_path = os.path.join(MUSIC_FOLDER, selected_music)
+            if not os.path.exists(audio_path):
+                flash(f'El archivo de música seleccionado no existe: {selected_music}', 'warning')
+                audio_path = None
+            else:
+                print(f"Usando pista de audio: {selected_music}")
+        
         # Generate product video
         print("Iniciando generación de video del producto...")
         flash('Procesando video del producto... Esto puede tomar algunos minutos.', 'info')
@@ -2338,7 +2477,9 @@ def generate_product_video_route():
             animation_type=animation_type,
             video_size=video_size,
             background_is_video=background_is_video,
-            outro_path=outro_path
+            outro_path=outro_path,
+            audio_path=audio_path,
+            fade_duration=fade_duration
         )
         
         # Clean up uploaded files
@@ -2351,7 +2492,8 @@ def generate_product_video_route():
                 print(f"Warning: Could not delete file {file_path}: {e}")
         
         flash('¡Video del producto generado exitosamente!', 'success')
-        return render_template('index.html', video_filename=output_filename)
+        music_files = get_available_music()
+        return render_template('index.html', video_filename=output_filename, music_files=music_files)
     
     except Exception as e:
         print(f"Error en generate_product_video_route: {e}")
@@ -2389,6 +2531,8 @@ def generate_3d_spin_route():
         # Get parameters
         frames_per_rotation = int(request.form.get('frames_per_rotation', 60))
         perspective_strength = float(request.form.get('perspective_strength', 0.3))
+        selected_music = request.form.get('music_track', '')
+        fade_duration = float(request.form.get('fade_duration', 1.0))
         
         # Validate front image
         if front_image.filename == '':
@@ -2489,6 +2633,16 @@ def generate_3d_spin_route():
         output_filename = f"3d_spin_multi_{uuid.uuid4().hex}.mp4"
         output_path = os.path.join(app.config['VIDEOS_FOLDER'], output_filename)
         
+        # Get audio path if music is selected
+        audio_path = None
+        if selected_music and selected_music != '':
+            audio_path = os.path.join(MUSIC_FOLDER, selected_music)
+            if not os.path.exists(audio_path):
+                flash(f'El archivo de música seleccionado no existe: {selected_music}', 'warning')
+                audio_path = None
+            else:
+                print(f"Usando pista de audio: {selected_music}")
+        
         # Generate multi-image 3D spin video
         print("Iniciando generación de video 3D con múltiples imágenes...")
         flash('Procesando video 3D con múltiples perspectivas... Esto puede tomar algunos minutos.', 'info')
@@ -2497,7 +2651,9 @@ def generate_3d_spin_route():
             output_path,
             frames_per_rotation=frames_per_rotation,
             perspective_strength=perspective_strength,
-            bg_color=bg_color
+            bg_color=bg_color,
+            audio_path=audio_path,
+            fade_duration=fade_duration
         )
         
         # Clean up uploaded and processed files
@@ -2510,7 +2666,8 @@ def generate_3d_spin_route():
                 print(f"Warning: Could not delete file {file_path}: {e}")
         
         flash('¡Video 3D generado exitosamente!', 'success')
-        return render_template('index.html', video_filename=output_filename)
+        music_files = get_available_music()
+        return render_template('index.html', video_filename=output_filename, music_files=music_files)
     
     except Exception as e:
         print(f"Error en generate_3d_spin_route: {e}")

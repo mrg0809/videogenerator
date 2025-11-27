@@ -45,6 +45,8 @@ uploads/*
 !uploads/.gitkeep
 videos/*
 !videos/.gitkeep
+music/*
+!music/.gitkeep
 
 # Temporary files
 *.tmp
