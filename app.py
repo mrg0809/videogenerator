@@ -51,6 +51,22 @@ def allowed_file(filename, file_type):
     return False
 
 
+def is_video_file(filename):
+    """
+    Check if a file is a video based on its extension.
+    
+    Args:
+        filename: Name of the file
+    
+    Returns:
+        bool: True if the file is a video, False otherwise
+    """
+    if '.' not in filename:
+        return False
+    ext = filename.rsplit('.', 1)[1].lower()
+    return ext in ALLOWED_VIDEO_EXTENSIONS
+
+
 def remove_background_only(product_image_path, output_path, target_size=(1920, 1080)):
     """
     Remove background from product image and save with transparency.
@@ -491,6 +507,287 @@ def create_filmstrip_transition_clip(image_path, duration=3, video_size=(1920, 1
     
     except Exception as e:
         print(f"Error creating filmstrip transition clip: {e}")
+        raise
+
+
+def load_and_prepare_video_background(background_video_path, duration, video_size):
+    """
+    Load a video file and prepare it as a background clip.
+    Loops or trims the video to match the target duration.
+    
+    Args:
+        background_video_path: Path to the background video
+        duration: Target duration in seconds
+        video_size: Target size (width, height)
+    
+    Returns:
+        VideoClip: Prepared background video clip
+    """
+    # Load background video
+    bg_video = VideoFileClip(background_video_path)
+    
+    # Resize background video to match target size
+    bg_video = bg_video.resize(video_size)
+    
+    # Loop or trim the background video to match duration
+    if bg_video.duration < duration:
+        # Use MoviePy's loop functionality for memory efficiency
+        bg_video = bg_video.loop(duration=duration)
+    else:
+        bg_video = bg_video.subclip(0, duration)
+    
+    return bg_video
+
+
+def create_carousel_clip_with_video_bg(product_image_path, background_video_path, duration=3, video_size=(1920, 1080)):
+    """
+    Create a video clip with carousel effect and a video background.
+    
+    Args:
+        product_image_path: Path to the product image (with transparent background)
+        background_video_path: Path to the background video
+        duration: Duration of the clip in seconds
+        video_size: Size of the video (width, height)
+    
+    Returns:
+        VideoClip: The created video clip with video background and carousel effect
+    """
+    try:
+        # Load and prepare background video using helper function
+        bg_video = load_and_prepare_video_background(background_video_path, duration, video_size)
+        
+        # Load product image with transparency
+        product_img = Image.open(product_image_path).convert("RGBA")
+        
+        # Scale product to fit within video size while maintaining aspect ratio
+        product_width, product_height = product_img.size
+        bg_width, bg_height = video_size
+        
+        # Calculate scaling factor (use 80% of background size max)
+        scale_factor = min((bg_width * 0.8) / product_width, (bg_height * 0.8) / product_height)
+        new_width = int(product_width * scale_factor)
+        new_height = int(product_height * scale_factor)
+        
+        product_img = product_img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+        
+        # Convert to numpy array for MoviePy
+        product_array = np.array(product_img)
+        
+        # Create product clip with the same duration
+        product_clip = ImageClip(product_array, duration=duration, ismask=False)
+        
+        # Define position function with carousel effect
+        def position_func(t):
+            progress = t / duration
+            
+            if progress < 0.35:
+                # Slide in from right
+                ease = progress / 0.35
+                ease = 1 - (1 - ease) ** 4
+                x = video_size[0] * 1.5 * (1 - ease)
+            elif progress > 0.65:
+                # Slide out to left
+                ease = (progress - 0.65) / 0.35
+                ease = ease ** 4
+                x = -video_size[0] * 1.5 * ease
+            else:
+                x = 0
+            
+            # Center vertically
+            y = (video_size[1] - new_height) // 2
+            return (x + (video_size[0] - new_width) // 2, y)
+        
+        # Define resize function
+        def resize_func(t):
+            progress = t / duration
+            
+            if progress < 0.35:
+                ease = progress / 0.35
+                ease = 1 - (1 - ease) ** 4
+                scale = 0.6 + (0.45 * ease)
+            elif progress > 0.65:
+                ease = (progress - 0.65) / 0.35
+                ease = ease ** 4
+                scale = 1.05 - (0.45 * ease)
+            else:
+                scale = 1.05
+            
+            return scale
+        
+        # Apply position and resize
+        product_clip = product_clip.set_position(position_func)
+        product_clip = product_clip.resize(resize_func)
+        
+        # Composite product over background
+        final_clip = CompositeVideoClip([bg_video, product_clip], size=video_size)
+        
+        return final_clip
+    
+    except Exception as e:
+        print(f"Error creating carousel clip with video background: {e}")
+        raise
+
+
+def create_card_clip_with_video_bg(product_image_path, background_video_path, duration=3, video_size=(1920, 1080)):
+    """
+    Create a video clip with card transition effect and a video background.
+    
+    Args:
+        product_image_path: Path to the product image (with transparent background)
+        background_video_path: Path to the background video
+        duration: Duration of the clip in seconds
+        video_size: Size of the video (width, height)
+    
+    Returns:
+        VideoClip: The created video clip with video background and card effect
+    """
+    try:
+        # Load and prepare background video using helper function
+        bg_video = load_and_prepare_video_background(background_video_path, duration, video_size)
+        
+        # Load product image with transparency
+        product_img = Image.open(product_image_path).convert("RGBA")
+        
+        # Scale product
+        product_width, product_height = product_img.size
+        bg_width, bg_height = video_size
+        scale_factor = min((bg_width * 0.8) / product_width, (bg_height * 0.8) / product_height)
+        new_width = int(product_width * scale_factor)
+        new_height = int(product_height * scale_factor)
+        
+        product_img = product_img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+        product_array = np.array(product_img)
+        
+        product_clip = ImageClip(product_array, duration=duration, ismask=False)
+        
+        # Card transition position function
+        def position_func(t):
+            progress = t / duration
+            
+            if progress < 0.35:
+                ease = progress / 0.35
+                ease = 1 - (1 - ease) ** 4
+                x = -video_size[0] * 0.8 * (1 - ease)
+                y = video_size[1] * 0.4 * (1 - ease)
+            elif progress > 0.65:
+                ease = (progress - 0.65) / 0.35
+                ease = ease ** 4
+                x = video_size[0] * 0.8 * ease
+                y = -video_size[1] * 0.4 * ease
+            else:
+                x = 0
+                y = 0
+            
+            center_x = (video_size[0] - new_width) // 2
+            center_y = (video_size[1] - new_height) // 2
+            return (center_x + x, center_y + y)
+        
+        # Card resize function
+        def resize_func(t):
+            progress = t / duration
+            
+            if progress < 0.35:
+                ease = progress / 0.35
+                ease = 1 - (1 - ease) ** 4
+                scale = 0.5 + (0.6 * ease)
+            elif progress > 0.65:
+                ease = (progress - 0.65) / 0.35
+                ease = ease ** 4
+                scale = 1.1 - (0.6 * ease)
+            else:
+                scale = 1.1
+            
+            return scale
+        
+        product_clip = product_clip.set_position(position_func)
+        product_clip = product_clip.resize(resize_func)
+        
+        final_clip = CompositeVideoClip([bg_video, product_clip], size=video_size)
+        
+        return final_clip
+    
+    except Exception as e:
+        print(f"Error creating card clip with video background: {e}")
+        raise
+
+
+def create_filmstrip_clip_with_video_bg(product_image_path, background_video_path, duration=3, video_size=(1920, 1080)):
+    """
+    Create a video clip with filmstrip transition effect and a video background.
+    
+    Args:
+        product_image_path: Path to the product image (with transparent background)
+        background_video_path: Path to the background video
+        duration: Duration of the clip in seconds
+        video_size: Size of the video (width, height)
+    
+    Returns:
+        VideoClip: The created video clip with video background and filmstrip effect
+    """
+    try:
+        # Load and prepare background video using helper function
+        bg_video = load_and_prepare_video_background(background_video_path, duration, video_size)
+        
+        # Load product image with transparency
+        product_img = Image.open(product_image_path).convert("RGBA")
+        
+        # Scale product
+        product_width, product_height = product_img.size
+        bg_width, bg_height = video_size
+        scale_factor = min((bg_width * 0.8) / product_width, (bg_height * 0.8) / product_height)
+        new_width = int(product_width * scale_factor)
+        new_height = int(product_height * scale_factor)
+        
+        product_img = product_img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+        product_array = np.array(product_img)
+        
+        product_clip = ImageClip(product_array, duration=duration, ismask=False)
+        
+        # Filmstrip position function (vertical scrolling)
+        def position_func(t):
+            progress = t / duration
+            
+            if progress < 0.4:
+                ease = progress / 0.4
+                ease = 1 - (1 - ease) ** 4
+                y = video_size[1] * 1.3 * (1 - ease)
+            elif progress > 0.6:
+                ease = (progress - 0.6) / 0.4
+                ease = ease ** 4
+                y = -video_size[1] * 1.3 * ease
+            else:
+                y = 0
+            
+            center_x = (video_size[0] - new_width) // 2
+            center_y = (video_size[1] - new_height) // 2
+            return (center_x, center_y + y)
+        
+        # Filmstrip resize function
+        def resize_func(t):
+            progress = t / duration
+            
+            if progress < 0.4:
+                ease = progress / 0.4
+                ease = 1 - (1 - ease) ** 3
+                scale = 0.65 + (0.43 * ease)
+            elif progress > 0.6:
+                ease = (progress - 0.6) / 0.4
+                ease = ease ** 3
+                scale = 1.08 - (0.43 * ease)
+            else:
+                scale = 1.08
+            
+            return scale
+        
+        product_clip = product_clip.set_position(position_func)
+        product_clip = product_clip.resize(resize_func)
+        
+        final_clip = CompositeVideoClip([bg_video, product_clip], size=video_size)
+        
+        return final_clip
+    
+    except Exception as e:
+        print(f"Error creating filmstrip clip with video background: {e}")
         raise
 
 
@@ -1415,19 +1712,20 @@ def generate_3d_spin_video(image_path, output_path, frames_per_rotation=60,
         raise
 
 
-def generate_video(intro_path, product_images, background_image_path, output_path, outro_path=None, remove_bg=True, transition_type='carousel', video_format='tiktok'):
+def generate_video(intro_path, product_images, background_path, output_path, outro_path=None, remove_bg=True, transition_type='carousel', video_format='tiktok', background_is_video=False):
     """
     Generate the final video with optional intro/outro and product images using selected transition effect.
     
     Args:
         intro_path: Path to intro video (can be None for no intro)
         product_images: List of paths to product images
-        background_image_path: Path to custom background image (can be None)
+        background_path: Path to custom background image or video (can be None)
         output_path: Path to save the output video
         outro_path: Path to outro video (can be None for no outro)
         remove_bg: Whether to remove background from images (default: True)
         transition_type: Type of transition ('carousel', 'card', or 'filmstrip')
         video_format: Video format ('tiktok' for 1080x1920, 'youtube' for 1920x1080)
+        background_is_video: Whether the background is a video file (default: False)
     
     Returns:
         str: Path to the generated video
@@ -1463,42 +1761,90 @@ def generate_video(intro_path, product_images, background_image_path, output_pat
         
         # Process each product image
         print(f"Processing {len(product_images)} product images...")
-        for i, product_image in enumerate(product_images):
-            print(f"Processing image {i+1}/{len(product_images)}...")
-            
-            # Create processed image path
-            processed_image_path = os.path.join(
-                UPLOAD_FOLDER, 
-                f"processed_{uuid.uuid4().hex}.jpg"
-            )
-            processed_images.append(processed_image_path)
-            
-            # Remove background and composite if requested
-            if remove_bg:
-                remove_background_and_composite(
-                    product_image, 
-                    background_image_path, 
-                    processed_image_path,
-                    video_size
+        
+        # If background is video, we need to use different processing
+        if background_is_video and background_path:
+            print("Using video background for products...")
+            for i, product_image in enumerate(product_images):
+                print(f"Processing image {i+1}/{len(product_images)} with video background...")
+                
+                # For video backgrounds, we need to remove background and keep as PNG with transparency
+                processed_image_path = os.path.join(
+                    UPLOAD_FOLDER, 
+                    f"processed_{uuid.uuid4().hex}.png"
                 )
-            else:
-                # Just resize and optionally composite on background without removing bg
-                composite_without_removal(
-                    product_image,
-                    background_image_path,
-                    processed_image_path,
-                    video_size
+                processed_images.append(processed_image_path)
+                
+                # Remove background only (keep transparency for compositing)
+                if remove_bg:
+                    remove_background_only(
+                        product_image, 
+                        processed_image_path,
+                        video_size
+                    )
+                else:
+                    # Just copy the product image resized
+                    img = Image.open(product_image).convert("RGBA")
+                    product_width, product_height = img.size
+                    bg_width, bg_height = video_size
+                    scale_factor = min((bg_width * 0.8) / product_width, (bg_height * 0.8) / product_height)
+                    new_width = int(product_width * scale_factor)
+                    new_height = int(product_height * scale_factor)
+                    img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+                    # Create transparent canvas and center product
+                    canvas = Image.new('RGBA', video_size, (0, 0, 0, 0))
+                    x = (bg_width - new_width) // 2
+                    y = (bg_height - new_height) // 2
+                    canvas.paste(img, (x, y), img if img.mode == 'RGBA' else None)
+                    canvas.save(processed_image_path, 'PNG')
+                
+                # Create clip with video background and selected transition effect
+                if transition_type == 'card':
+                    transition_clip = create_card_clip_with_video_bg(processed_image_path, background_path, duration=3, video_size=video_size)
+                elif transition_type == 'filmstrip':
+                    transition_clip = create_filmstrip_clip_with_video_bg(processed_image_path, background_path, duration=3, video_size=video_size)
+                else:  # default to carousel
+                    transition_clip = create_carousel_clip_with_video_bg(processed_image_path, background_path, duration=3, video_size=video_size)
+                
+                clips.append(transition_clip)
+        else:
+            # Standard processing with image background (or no background)
+            for i, product_image in enumerate(product_images):
+                print(f"Processing image {i+1}/{len(product_images)}...")
+                
+                # Create processed image path
+                processed_image_path = os.path.join(
+                    UPLOAD_FOLDER, 
+                    f"processed_{uuid.uuid4().hex}.jpg"
                 )
-            
-            # Create clip with selected transition effect
-            if transition_type == 'card':
-                transition_clip = create_card_transition_clip(processed_image_path, duration=3, video_size=video_size)
-            elif transition_type == 'filmstrip':
-                transition_clip = create_filmstrip_transition_clip(processed_image_path, duration=3, video_size=video_size)
-            else:  # default to carousel
-                transition_clip = create_carousel_clip(processed_image_path, duration=3, video_size=video_size)
-            
-            clips.append(transition_clip)
+                processed_images.append(processed_image_path)
+                
+                # Remove background and composite if requested
+                if remove_bg:
+                    remove_background_and_composite(
+                        product_image, 
+                        background_path, 
+                        processed_image_path,
+                        video_size
+                    )
+                else:
+                    # Just resize and optionally composite on background without removing bg
+                    composite_without_removal(
+                        product_image,
+                        background_path,
+                        processed_image_path,
+                        video_size
+                    )
+                
+                # Create clip with selected transition effect
+                if transition_type == 'card':
+                    transition_clip = create_card_transition_clip(processed_image_path, duration=3, video_size=video_size)
+                elif transition_type == 'filmstrip':
+                    transition_clip = create_filmstrip_transition_clip(processed_image_path, duration=3, video_size=video_size)
+                else:  # default to carousel
+                    transition_clip = create_carousel_clip(processed_image_path, duration=3, video_size=video_size)
+                
+                clips.append(transition_clip)
         
         # Load outro video if provided
         if outro_path:
@@ -1637,17 +1983,29 @@ def generate_video_route():
             uploaded_files.append(img_path)
             product_image_paths.append(img_path)
         
-        # Save custom background if provided
+        # Save custom background if provided (can be image or video)
         background_path = None
+        background_is_video = False
         if custom_background and custom_background.filename != '':
-            if allowed_file(custom_background.filename, 'image'):
+            # Check if background is a video or image
+            if is_video_file(custom_background.filename):
+                if allowed_file(custom_background.filename, 'video'):
+                    print("Guardando video de fondo personalizado...")
+                    bg_filename = f"{uuid.uuid4().hex}_{secure_filename(custom_background.filename)}"
+                    background_path = os.path.join(app.config['UPLOAD_FOLDER'], bg_filename)
+                    custom_background.save(background_path)
+                    uploaded_files.append(background_path)
+                    background_is_video = True
+                else:
+                    flash('Formato de video de fondo no válido. Use MP4, MOV o AVI', 'warning')
+            elif allowed_file(custom_background.filename, 'image'):
                 print("Guardando imagen de fondo personalizado...")
                 bg_filename = f"{uuid.uuid4().hex}_{secure_filename(custom_background.filename)}"
                 background_path = os.path.join(app.config['UPLOAD_FOLDER'], bg_filename)
                 custom_background.save(background_path)
                 uploaded_files.append(background_path)
             else:
-                flash('Formato de imagen de fondo no válido', 'warning')
+                flash('Formato de fondo no válido. Use PNG, JPG, JPEG, MP4, MOV o AVI', 'warning')
         
         # Generate output filename
         output_filename = f"video_{uuid.uuid4().hex}.mp4"
@@ -1658,7 +2016,7 @@ def generate_video_route():
         flash('Procesando video... Esto puede tomar varios minutos.', 'info')
         generate_video(intro_path, product_image_paths, background_path, output_path, 
                       outro_path=outro_path, remove_bg=remove_bg, transition_type=transition_type, 
-                      video_format=video_format)
+                      video_format=video_format, background_is_video=background_is_video)
         
         # Clean up uploaded files
         print("Limpiando archivos temporales...")
