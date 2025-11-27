@@ -539,6 +539,41 @@ def load_and_prepare_video_background(background_video_path, duration, video_siz
     return bg_video
 
 
+def create_image_clip_with_alpha(product_array, duration):
+    """
+    Create an ImageClip with proper alpha channel handling for transparency.
+    
+    Args:
+        product_array: Numpy array of the image (RGB or RGBA)
+        duration: Duration of the clip in seconds
+    
+    Returns:
+        ImageClip: Clip with mask set if alpha channel is present
+    """
+    # Check if image has alpha channel (4 channels)
+    if len(product_array.shape) == 3 and product_array.shape[2] >= 4:
+        # Extract RGB and Alpha channels separately
+        rgb_array = product_array[:, :, :3]  # RGB channels
+        alpha_array = product_array[:, :, 3]  # Alpha channel (0-255)
+        
+        # Normalize alpha to 0-1 range for MoviePy mask
+        alpha_normalized = alpha_array.astype(float) / 255.0
+        
+        # Create product clip from RGB only
+        product_clip = ImageClip(rgb_array, duration=duration)
+        
+        # Create mask clip from alpha channel
+        mask_clip = ImageClip(alpha_normalized, duration=duration, ismask=True)
+        
+        # Set the mask on the product clip
+        product_clip = product_clip.set_mask(mask_clip)
+    else:
+        # No alpha channel, create clip without mask
+        product_clip = ImageClip(product_array, duration=duration)
+    
+    return product_clip
+
+
 def create_carousel_clip_with_video_bg(product_image_path, background_video_path, duration=3, video_size=(1920, 1080)):
     """
     Create a video clip with carousel effect and a video background.
@@ -562,9 +597,8 @@ def create_carousel_clip_with_video_bg(product_image_path, background_video_path
         # Convert to numpy array for MoviePy
         product_array = np.array(product_img)
         
-        # Create product clip with the same duration
-        # The image is already at video_size with the product centered
-        product_clip = ImageClip(product_array, duration=duration, ismask=False)
+        # Create product clip with proper alpha handling
+        product_clip = create_image_clip_with_alpha(product_array, duration)
         
         # Define position function with carousel effect (slide in/out animation)
         def position_func(t):
@@ -637,8 +671,8 @@ def create_card_clip_with_video_bg(product_image_path, background_video_path, du
         product_img = Image.open(product_image_path).convert("RGBA")
         product_array = np.array(product_img)
         
-        # Create product clip - image is already at video_size with product centered
-        product_clip = ImageClip(product_array, duration=duration, ismask=False)
+        # Create product clip with proper alpha handling
+        product_clip = create_image_clip_with_alpha(product_array, duration)
         
         # Card transition position function
         def position_func(t):
@@ -710,8 +744,8 @@ def create_filmstrip_clip_with_video_bg(product_image_path, background_video_pat
         product_img = Image.open(product_image_path).convert("RGBA")
         product_array = np.array(product_img)
         
-        # Create product clip - image is already at video_size with product centered
-        product_clip = ImageClip(product_array, duration=duration, ismask=False)
+        # Create product clip with proper alpha handling
+        product_clip = create_image_clip_with_alpha(product_array, duration)
         
         # Filmstrip position function (vertical scrolling)
         def position_func(t):
