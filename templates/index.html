@@ -143,6 +143,35 @@
                     <small>Selecciona el efecto de transición entre imágenes</small>
                 </div>
 
+                <div class="form-group">
+                    <label for="music_track">
+                        <span class="label-icon">🎵</span>
+                        Pista de Audio (opcional)
+                    </label>
+                    <select id="music_track" name="music_track" class="form-select">
+                        <option value="">Sin música</option>
+                        {% for music_file in music_files %}
+                        <option value="{{ music_file }}">{{ music_file }}</option>
+                        {% endfor %}
+                    </select>
+                    <small>Selecciona una pista de audio de la carpeta 'music'. El audio tendrá fade in al inicio y fade out al final.</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="fade_duration">
+                        <span class="label-icon">🔊</span>
+                        Duración del Fade (segundos)
+                    </label>
+                    <select id="fade_duration" name="fade_duration" class="form-select">
+                        <option value="0.5">0.5 segundos</option>
+                        <option value="1.0" selected>1.0 segundos</option>
+                        <option value="1.5">1.5 segundos</option>
+                        <option value="2.0">2.0 segundos</option>
+                        <option value="3.0">3.0 segundos</option>
+                    </select>
+                    <small>Duración del efecto fade in/out del audio</small>
+                </div>
+
                 <div class="button-group">
                     <button type="submit" class="btn btn-primary" id="submitBtn">
                         <span class="btn-icon">✨</span>
@@ -236,6 +265,35 @@
                             <option value="10">10 segundos</option>
                         </select>
                         <small>Duración total del video animado (sin contar el outro)</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="product_music_track">
+                            <span class="label-icon">🎵</span>
+                            Pista de Audio (opcional)
+                        </label>
+                        <select id="product_music_track" name="music_track" class="form-select">
+                            <option value="">Sin música</option>
+                            {% for music_file in music_files %}
+                            <option value="{{ music_file }}">{{ music_file }}</option>
+                            {% endfor %}
+                        </select>
+                        <small>Selecciona una pista de audio de la carpeta 'music'. El audio tendrá fade in al inicio y fade out al final.</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="product_fade_duration">
+                            <span class="label-icon">🔊</span>
+                            Duración del Fade (segundos)
+                        </label>
+                        <select id="product_fade_duration" name="fade_duration" class="form-select">
+                            <option value="0.5">0.5 segundos</option>
+                            <option value="1.0" selected>1.0 segundos</option>
+                            <option value="1.5">1.5 segundos</option>
+                            <option value="2.0">2.0 segundos</option>
+                            <option value="3.0">3.0 segundos</option>
+                        </select>
+                        <small>Duración del efecto fade in/out del audio</small>
                     </div>
 
                     <div class="button-group">
@@ -354,6 +412,35 @@
                         <small>Controla qué tan pronunciado es el efecto 3D. 0.0 = rotación 2D simple, 1.0 = máximo efecto de profundidad</small>
                     </div>
 
+                    <div class="form-group">
+                        <label for="spin_music_track">
+                            <span class="label-icon">🎵</span>
+                            Pista de Audio (opcional)
+                        </label>
+                        <select id="spin_music_track" name="music_track" class="form-select">
+                            <option value="">Sin música</option>
+                            {% for music_file in music_files %}
+                            <option value="{{ music_file }}">{{ music_file }}</option>
+                            {% endfor %}
+                        </select>
+                        <small>Selecciona una pista de audio de la carpeta 'music'. El audio tendrá fade in al inicio y fade out al final.</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="spin_fade_duration">
+                            <span class="label-icon">🔊</span>
+                            Duración del Fade (segundos)
+                        </label>
+                        <select id="spin_fade_duration" name="fade_duration" class="form-select">
+                            <option value="0.5">0.5 segundos</option>
+                            <option value="1.0" selected>1.0 segundos</option>
+                            <option value="1.5">1.5 segundos</option>
+                            <option value="2.0">2.0 segundos</option>
+                            <option value="3.0">3.0 segundos</option>
+                        </select>
+                        <small>Duración del efecto fade in/out del audio</small>
+                    </div>
+
                     <div class="button-group">
                         <button type="submit" class="btn btn-primary" id="spin3dSubmitBtn">
                             <span class="btn-icon">🌀</span>
@@ -393,6 +480,7 @@
                     <li><strong>Imágenes de Productos:</strong> Selecciona entre 1 y 5 imágenes de productos. El fondo puede ser eliminado automáticamente.</li>
                     <li><strong>Fondo Personalizado:</strong> (Opcional) Sube una imagen que se usará como nuevo fondo.</li>
                     <li><strong>Tipo de Transición:</strong> Elige entre Carrusel, Tarjetas o Cinta de Película.</li>
+                    <li><strong>Pista de Audio:</strong> (Opcional) Selecciona una pista de la carpeta 'music' para agregar música con fade in/out.</li>
                 </ol>
             </div>
             
@@ -403,6 +491,7 @@
                     <li><strong>Fondo Personalizado:</strong> (Opcional) Sube una imagen de fondo personalizado.</li>
                     <li><strong>Tipo de Animación:</strong> Elige entre rotación 360°, rotación con zoom, zoom in/out o efecto flotante.</li>
                     <li><strong>Duración:</strong> Selecciona la duración del video (3, 5, 8 o 10 segundos).</li>
+                    <li><strong>Pista de Audio:</strong> (Opcional) Selecciona una pista de la carpeta 'music' para agregar música con fade in/out.</li>
                 </ol>
             </div>
 
@@ -416,8 +505,19 @@
                     <li><strong>Fondo Personalizado:</strong> OPCIONAL - Imagen de fondo. Si no se proporciona, se usará blanco.</li>
                     <li><strong>Frames por Rotación:</strong> Selecciona cuántos frames usar para la rotación completa (30-120). Más frames = más suave.</li>
                     <li><strong>Fuerza de Perspectiva:</strong> Controla la intensidad del efecto 3D (0.0-1.0). 0.3 es el valor recomendado.</li>
+                    <li><strong>Pista de Audio:</strong> (Opcional) Selecciona una pista de la carpeta 'music' para agregar música con fade in/out.</li>
                     <li>El sistema cambia automáticamente entre las imágenes según el ángulo de rotación, creando una vista 360° realista.</li>
                     <li><strong>Tip:</strong> Con solo la imagen frontal, se aplicará un efecto de fade. Con 2-4 imágenes, verás todas las perspectivas reales.</li>
+                </ol>
+            </div>
+
+            <div class="instructions-section">
+                <h4>🎵 Agregar Música:</h4>
+                <ol>
+                    <li>Coloca tus archivos de audio (MP3, WAV, OGG, M4A, AAC) en la carpeta <code>music</code> del proyecto.</li>
+                    <li>Las pistas disponibles aparecerán automáticamente en el selector de audio de cada formulario.</li>
+                    <li>El audio se ajustará automáticamente a la duración del video.</li>
+                    <li>El efecto fade in se aplica al inicio y fade out al final para transiciones suaves.</li>
                 </ol>
             </div>
             
@@ -442,6 +542,11 @@
                     <div class="feature-icon">🌀</div>
                     <h4>Efecto 3D Spin</h4>
                     <p>Rotación 360° con perspectiva 3D realista usando OpenCV</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🎵</div>
+                    <h4>Música con Fade In/Out</h4>
+                    <p>Agrega pistas de audio con efectos de transición suave</p>
                 </div>
                 <div class="feature-card">
                     <div class="feature-icon">✂️</div>
