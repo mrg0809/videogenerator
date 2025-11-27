@@ -543,33 +543,19 @@ def create_image_clip_with_alpha(product_array, duration):
     """
     Create an ImageClip with proper alpha channel handling for transparency.
     
+    MoviePy's ImageClip automatically creates a mask when given an RGBA array,
+    so we simply pass the array directly.
+    
     Args:
         product_array: Numpy array of the image (RGB or RGBA)
         duration: Duration of the clip in seconds
     
     Returns:
-        ImageClip: Clip with mask set if alpha channel is present
+        ImageClip: Clip with mask automatically set if alpha channel is present
     """
-    # Check if image has alpha channel (4 channels)
-    if len(product_array.shape) == 3 and product_array.shape[2] >= 4:
-        # Extract RGB and Alpha channels separately
-        rgb_array = product_array[:, :, :3]  # RGB channels
-        alpha_array = product_array[:, :, 3]  # Alpha channel (0-255)
-        
-        # Normalize alpha to 0-1 range for MoviePy mask
-        alpha_normalized = alpha_array.astype(float) / 255.0
-        
-        # Create product clip from RGB only
-        product_clip = ImageClip(rgb_array, duration=duration)
-        
-        # Create mask clip from alpha channel
-        mask_clip = ImageClip(alpha_normalized, duration=duration, ismask=True)
-        
-        # Set the mask on the product clip
-        product_clip = product_clip.set_mask(mask_clip)
-    else:
-        # No alpha channel, create clip without mask
-        product_clip = ImageClip(product_array, duration=duration)
+    # MoviePy automatically handles RGBA arrays and creates a mask from the alpha channel
+    # Just pass the array directly - MoviePy will extract RGB for the clip and alpha for the mask
+    product_clip = ImageClip(product_array, duration=duration)
     
     return product_clip
 
