@@ -3,7 +3,7 @@ import uuid
 import io
 from flask import Flask, request, render_template, redirect, url_for, send_from_directory, flash
 from werkzeug.utils import secure_filename
-from moviepy.editor import VideoFileClip, ImageClip, CompositeVideoClip, concatenate_videoclips, ColorClip
+from moviepy.editor import VideoFileClip, ImageClip, CompositeVideoClip, concatenate_videoclips, ColorClip, VideoClip
 from PIL import Image, ImageDraw
 from rembg import remove
 import numpy as np
@@ -542,45 +542,48 @@ def load_and_prepare_video_background(background_video_path, duration, video_siz
     return bg_video
 
 
-def create_image_clip_with_alpha(product_array, duration):
+def composite_pil_images(background_array, product_pil, position=(0, 0), scale=1.0):
     """
-    Create an ImageClip with proper alpha channel handling for transparency.
-    
-    Explicitly extracts the alpha channel and creates a separate mask clip to ensure
-    proper transparency handling across all MoviePy versions.
+    Composite a PIL RGBA image onto a numpy array background using PIL's proven alpha blending.
     
     Args:
-        product_array: Numpy array of the image (RGB or RGBA)
-        duration: Duration of the clip in seconds
+        background_array: Numpy array of the background frame (RGB)
+        product_pil: PIL Image with RGBA (has transparency)
+        position: (x, y) offset for positioning the product
+        scale: Scale factor for the product
     
     Returns:
-        ImageClip: Clip with mask set if alpha channel is present
+        Numpy array of the composited frame (RGB)
     """
-    # Check if image has alpha channel (4 channels)
-    if len(product_array.shape) == 3 and product_array.shape[2] == 4:
-        # Extract RGB and Alpha channels separately for explicit control
-        rgb_array = product_array[:, :, :3].copy()  # RGB channels
-        alpha_array = product_array[:, :, 3].copy()  # Alpha channel (0-255)
-        
-        # Create product clip from RGB
-        product_clip = ImageClip(rgb_array, duration=duration)
-        
-        # Create mask from alpha channel (normalize to 0-1 for MoviePy)
-        alpha_normalized = alpha_array.astype('float64') / 255.0
-        mask_clip = ImageClip(alpha_normalized, duration=duration, ismask=True)
-        
-        # Set the mask on the product clip
-        product_clip = product_clip.set_mask(mask_clip)
-    else:
-        # No alpha channel, create clip without mask
-        product_clip = ImageClip(product_array, duration=duration)
+    # Convert background to PIL
+    bg_pil = Image.fromarray(background_array.astype('uint8'), 'RGB')
     
-    return product_clip
+    # Scale product if needed
+    if scale != 1.0:
+        new_size = (int(product_pil.width * scale), int(product_pil.height * scale))
+        product_scaled = product_pil.resize(new_size, Image.Resampling.LANCZOS)
+    else:
+        product_scaled = product_pil
+    
+    # Calculate paste position (position is offset from default centered position)
+    paste_x = int(position[0])
+    paste_y = int(position[1])
+    
+    # Create a copy of background to paste onto
+    result = bg_pil.copy()
+    
+    # Use PIL's paste with alpha mask for proper transparency
+    # This is the SAME method used in remove_background_and_composite which works!
+    result.paste(product_scaled, (paste_x, paste_y), product_scaled)
+    
+    # Convert back to numpy array
+    return np.array(result)
 
 
 def create_carousel_clip_with_video_bg(product_image_path, background_video_path, duration=3, video_size=(1920, 1080)):
     """
     Create a video clip with carousel effect and a video background.
+    Uses PIL's proven alpha blending for reliable transparency compositing.
     
     Args:
         product_image_path: Path to the product image (already processed with transparent background at target size)
@@ -592,20 +595,17 @@ def create_carousel_clip_with_video_bg(product_image_path, background_video_path
         VideoClip: The created video clip with video background and carousel effect
     """
     try:
-        # Load and prepare background video using helper function
+        # Load and prepare background video
         bg_video = load_and_prepare_video_background(background_video_path, duration, video_size)
         
         # Load product image with transparency (already scaled and centered from remove_background_only)
-        product_img = Image.open(product_image_path).convert("RGBA")
+        product_pil = Image.open(product_image_path).convert("RGBA")
         
-        # Convert to numpy array for MoviePy
-        product_array = np.array(product_img)
-        
-        # Create product clip with proper alpha handling
-        product_clip = create_image_clip_with_alpha(product_array, duration)
+        # Store fps from background video
+        fps = bg_video.fps if bg_video.fps else 30
         
         # Define position function with carousel effect (slide in/out animation)
-        def position_func(t):
+        def get_position(t):
             progress = t / duration
             
             if progress < 0.35:
@@ -621,31 +621,40 @@ def create_carousel_clip_with_video_bg(product_image_path, background_video_path
             else:
                 x = 0
             
-            return (x, 0)  # Y is 0 since image is already centered on the canvas
+            return (x, 0)
         
-        # Define resize function for zoom effect
-        def resize_func(t):
+        # Define scale function for zoom effect
+        def get_scale(t):
             progress = t / duration
             
             if progress < 0.35:
                 ease = progress / 0.35
                 ease = 1 - (1 - ease) ** 4
-                scale = 0.8 + (0.25 * ease)  # Start at 80%, end at 105%
+                scale = 0.8 + (0.25 * ease)
             elif progress > 0.65:
                 ease = (progress - 0.65) / 0.35
                 ease = ease ** 4
-                scale = 1.05 - (0.25 * ease)  # 105% to 80%
+                scale = 1.05 - (0.25 * ease)
             else:
-                scale = 1.05  # Hold at 105%
+                scale = 1.05
             
             return scale
         
-        # Apply position and resize
-        product_clip = product_clip.set_position(position_func)
-        product_clip = product_clip.resize(resize_func)
+        # Create a make_frame function that composites using PIL
+        def make_frame(t):
+            # Get background frame
+            bg_frame = bg_video.get_frame(t)
+            
+            # Get current position and scale
+            pos = get_position(t)
+            scale = get_scale(t)
+            
+            # Use PIL compositing (proven to work)
+            return composite_pil_images(bg_frame, product_pil, pos, scale)
         
-        # Composite product over background
-        final_clip = CompositeVideoClip([bg_video, product_clip], size=video_size)
+        # Create VideoClip with our custom make_frame function
+        final_clip = VideoClip(make_frame, duration=duration)
+        final_clip = final_clip.set_fps(fps)
         
         return final_clip
     
@@ -657,6 +666,7 @@ def create_carousel_clip_with_video_bg(product_image_path, background_video_path
 def create_card_clip_with_video_bg(product_image_path, background_video_path, duration=3, video_size=(1920, 1080)):
     """
     Create a video clip with card transition effect and a video background.
+    Uses PIL's proven alpha blending for reliable transparency compositing.
     
     Args:
         product_image_path: Path to the product image (already processed with transparent background at target size)
@@ -668,18 +678,17 @@ def create_card_clip_with_video_bg(product_image_path, background_video_path, du
         VideoClip: The created video clip with video background and card effect
     """
     try:
-        # Load and prepare background video using helper function
+        # Load and prepare background video
         bg_video = load_and_prepare_video_background(background_video_path, duration, video_size)
         
-        # Load product image with transparency (already scaled and centered from remove_background_only)
-        product_img = Image.open(product_image_path).convert("RGBA")
-        product_array = np.array(product_img)
+        # Load product image with transparency
+        product_pil = Image.open(product_image_path).convert("RGBA")
         
-        # Create product clip with proper alpha handling
-        product_clip = create_image_clip_with_alpha(product_array, duration)
+        # Store fps from background video
+        fps = bg_video.fps if bg_video.fps else 30
         
         # Card transition position function
-        def position_func(t):
+        def get_position(t):
             progress = t / duration
             
             if progress < 0.35:
@@ -696,29 +705,35 @@ def create_card_clip_with_video_bg(product_image_path, background_video_path, du
                 x = 0
                 y = 0
             
-            return (x, y)  # Position relative to origin since image is already centered on the canvas
+            return (x, y)
         
-        # Card resize function
-        def resize_func(t):
+        # Card scale function
+        def get_scale(t):
             progress = t / duration
             
             if progress < 0.35:
                 ease = progress / 0.35
                 ease = 1 - (1 - ease) ** 4
-                scale = 0.7 + (0.4 * ease)  # Start at 70%, end at 110%
+                scale = 0.7 + (0.4 * ease)
             elif progress > 0.65:
                 ease = (progress - 0.65) / 0.35
                 ease = ease ** 4
-                scale = 1.1 - (0.4 * ease)  # 110% to 70%
+                scale = 1.1 - (0.4 * ease)
             else:
-                scale = 1.1  # Hold at 110%
+                scale = 1.1
             
             return scale
         
-        product_clip = product_clip.set_position(position_func)
-        product_clip = product_clip.resize(resize_func)
+        # Create a make_frame function that composites using PIL
+        def make_frame(t):
+            bg_frame = bg_video.get_frame(t)
+            pos = get_position(t)
+            scale = get_scale(t)
+            return composite_pil_images(bg_frame, product_pil, pos, scale)
         
-        final_clip = CompositeVideoClip([bg_video, product_clip], size=video_size)
+        # Create VideoClip with our custom make_frame function
+        final_clip = VideoClip(make_frame, duration=duration)
+        final_clip = final_clip.set_fps(fps)
         
         return final_clip
     
@@ -730,6 +745,7 @@ def create_card_clip_with_video_bg(product_image_path, background_video_path, du
 def create_filmstrip_clip_with_video_bg(product_image_path, background_video_path, duration=3, video_size=(1920, 1080)):
     """
     Create a video clip with filmstrip transition effect and a video background.
+    Uses PIL's proven alpha blending for reliable transparency compositing.
     
     Args:
         product_image_path: Path to the product image (already processed with transparent background at target size)
@@ -741,18 +757,17 @@ def create_filmstrip_clip_with_video_bg(product_image_path, background_video_pat
         VideoClip: The created video clip with video background and filmstrip effect
     """
     try:
-        # Load and prepare background video using helper function
+        # Load and prepare background video
         bg_video = load_and_prepare_video_background(background_video_path, duration, video_size)
         
-        # Load product image with transparency (already scaled and centered from remove_background_only)
-        product_img = Image.open(product_image_path).convert("RGBA")
-        product_array = np.array(product_img)
+        # Load product image with transparency
+        product_pil = Image.open(product_image_path).convert("RGBA")
         
-        # Create product clip with proper alpha handling
-        product_clip = create_image_clip_with_alpha(product_array, duration)
+        # Store fps from background video
+        fps = bg_video.fps if bg_video.fps else 30
         
         # Filmstrip position function (vertical scrolling)
-        def position_func(t):
+        def get_position(t):
             progress = t / duration
             
             if progress < 0.4:
@@ -766,29 +781,35 @@ def create_filmstrip_clip_with_video_bg(product_image_path, background_video_pat
             else:
                 y = 0
             
-            return (0, y)  # X is 0 since image is already centered on the canvas
+            return (0, y)
         
-        # Filmstrip resize function
-        def resize_func(t):
+        # Filmstrip scale function
+        def get_scale(t):
             progress = t / duration
             
             if progress < 0.4:
                 ease = progress / 0.4
                 ease = 1 - (1 - ease) ** 3
-                scale = 0.75 + (0.33 * ease)  # Start at 75%, end at 108%
+                scale = 0.75 + (0.33 * ease)
             elif progress > 0.6:
                 ease = (progress - 0.6) / 0.4
                 ease = ease ** 3
-                scale = 1.08 - (0.33 * ease)  # 108% to 75%
+                scale = 1.08 - (0.33 * ease)
             else:
-                scale = 1.08  # Hold at 108%
+                scale = 1.08
             
             return scale
         
-        product_clip = product_clip.set_position(position_func)
-        product_clip = product_clip.resize(resize_func)
+        # Create a make_frame function that composites using PIL
+        def make_frame(t):
+            bg_frame = bg_video.get_frame(t)
+            pos = get_position(t)
+            scale = get_scale(t)
+            return composite_pil_images(bg_frame, product_pil, pos, scale)
         
-        final_clip = CompositeVideoClip([bg_video, product_clip], size=video_size)
+        # Create VideoClip with our custom make_frame function
+        final_clip = VideoClip(make_frame, duration=duration)
+        final_clip = final_clip.set_fps(fps)
         
         return final_clip
     
